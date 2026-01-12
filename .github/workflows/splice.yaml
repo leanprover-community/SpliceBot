@@ -2,8 +2,16 @@
 name: Log PR Comment JSON
 
 on:
+  # the PR receives a comment
   issue_comment:
-    types: [created]
+    types: [created, edited]
+  # the PR receives a review
+  pull_request_review:
+    # whether or not it is accompanied by a comment
+    types: [submitted]
+  # the PR receives a review comment
+  pull_request_review_comment:
+    types: [created, edited]
 
 jobs:
   log-comment-json:
