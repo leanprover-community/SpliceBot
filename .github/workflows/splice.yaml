@@ -127,7 +127,7 @@ jobs:
           #SAFE_FILE="${SAFE_FILE// /-}"
           SAFE_FILE="$(echo "$FILE_PATH" | sed 's/[^0-9A-Z]*//g' | tr -d '\n')"
           SHORT_SHA="$(echo "$HEAD_SHA" | cut -c1-7)"
-          BRANCH="per-file-${PR_NUMBER}-${SAFE_FILE}-${SHORT_SHA}-$(sha256sum <(date) | sed 's=[^a-zA-Z0-9]*==g')"
+          BRANCH="file-${SAFE_FILE}-from-${PR_NUMBER}"
 
           echo "BRANCH=$BRANCH" | tee -a "$GITHUB_OUTPUT"
 
@@ -185,6 +185,7 @@ jobs:
           title: "Automated update"
           body: "This PR was automatically created from a review comment on PR #${{ steps.extract.outputs.pr_number }}."
           branch: ${{ steps.branch_and_copy.outputs.BRANCH }} #"automation/update-${{ github.run_id }}"
+          branch-suffix: random
           delete-branch: true
 
           #path: head
