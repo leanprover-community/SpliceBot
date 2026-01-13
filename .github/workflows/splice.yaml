@@ -21,3 +21,28 @@ jobs:
         run: |
           echo "Logging the JSON payload for the pull request comment..."
           echo '${{ toJson(github.event) }}'
+
+      - name: Extract file path & filename from review comment
+        id: extract
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // The path to the file where the suggestion / review comment is located
+            const path = context.payload?.comment?.path;
+            if (!path) {
+              core.setFailed("No file path found on this review comment payload.");
+              return;
+            }
+
+            // Derive just the filename from the path
+            const filename = path.split('/').pop();
+
+            core.info(`Found file path: ${path}`);
+            core.info(`Filename: ${filename}`);
+
+            core.setOutput('file_path', path);
+            core.setOutput('file_name', filename);
+      - name: Example use of outputs
+        run: |
+          echo "File path: ${{ steps.extract.outputs.file_path }}"
+          echo "File name: ${{ steps.extract.outputs.file_name }}"
