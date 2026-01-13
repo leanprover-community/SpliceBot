@@ -93,41 +93,31 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ${{ steps.extract.outputs.base_repo }}
-          ref: master #${{ steps.extract.outputs.base_sha }}
+          ref: master
           fetch-depth: 0
           path: base
-          #token: ${{ secrets.PAT }}
 
       - name: Check out HEAD (PR head repo @ head SHA)
         if: steps.extract.outputs.skip != 'true'
         uses: actions/checkout@v4
         with:
           repository: ${{ steps.extract.outputs.head_repo }}
-          #ref: ${{ steps.extract.outputs.head_sha }}
           fetch-depth: 0
           path: head
-          #token: ${{ secrets.PAT }}
 
       - name: Create branch and copy the single file
         if: steps.extract.outputs.skip != 'true'
         id: branch_and_copy
-        #env:
-        #  PAT: ${{ secrets.PAT }}
         run: |
           set -euo pipefail
 
           FILE_PATH="${{ steps.extract.outputs.file_path }}"
-          FILE_NAME="${{ steps.extract.outputs.file_name }}"
           PR_NUMBER="${{ steps.extract.outputs.pr_number }}"
           BASE_REF="${{ steps.extract.outputs.base_ref }}"
-          HEAD_SHA="${{ steps.extract.outputs.head_sha }}"
 
-          # Sanitize a branch-safe token from the filename (replace / and spaces)
-          #SAFE_FILE="${FILE_PATH//\//-}"
-          #SAFE_FILE="${SAFE_FILE// /-}"
+          # Only keep alphanumeric characters from file name
           SAFE_FILE="$(echo "$FILE_PATH" | sed 's/[^0-9A-Z]*//g' | tr -d '\n')"
-          SHORT_SHA="$(echo "$HEAD_SHA" | cut -c1-7)"
-          BRANCH="file-${SAFE_FILE}-from-${PR_NUMBER}"
+          BRANCH="file-${SAFE_FILE}-from-PR${PR_NUMBER}"
 
           echo "BRANCH=$BRANCH" | tee -a "$GITHUB_OUTPUT"
 
@@ -158,91 +148,30 @@ jobs:
             exit 0
           fi
 
-          printf $'git commit -m %s\n' "$COMMIT_MSG"
-          #git commit -m "$COMMIT_MSG"
-          #git push -u origin "${BRANCH}"
-          #git diff master..."${BRANCH}"
-          #git checkout master
-          ## After: git commit -m "$COMMIT_MSG"
-          #git remote set-url origin "https://x-access-token:${{ secrets.PAT }}@github.com/${{ steps.extract.outputs.base_repo }}.git"
-
-          ## Fetch the remote branch (if any) to make --force-with-lease meaningful
-          #git fetch origin "${BRANCH}" || true
-
-          ## Safer force push that refuses if remote moved unexpectedly
-          #git push --force-with-lease=origin/${BRANCH} origin "${BRANCH}"
-
-          #echo "NO_CHANGES=false" | tee -a "$GITHUB_OUTPUT"
-
       - name: Create Pull Request
+        id: cpr
         uses: peter-evans/create-pull-request@v6
         with:
           path: base
-          #branch:
           base: master
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: "chore: automated update"
           title: "Automated update"
           body: "This PR was automatically created from a review comment on PR #${{ steps.extract.outputs.pr_number }}."
-          branch: ${{ steps.branch_and_copy.outputs.BRANCH }} #"automation/update-${{ github.run_id }}"
+          branch: ${{ steps.branch_and_copy.outputs.BRANCH }}
           branch-suffix: random
           delete-branch: true
-
-          #path: head
-          #base: ${{ steps.branch_and_copy.outputs.BRANCH }} #master
-          #token: ${{ secrets.GITHUB_TOKEN }}
-          #commit-message: "chore: automated update"
-          #title: "Automated update"
-          #body: "This PR was automatically created from a review comment on PR #${{ steps.extract.outputs.pr_number }}."
-          ##branch: ${{ steps.branch_and_copy.outputs.BRANCH }} #"automation/update-${{ github.run_id }}"
-          #delete-branch: true
-
-          #- name: Open PR with only this file’s changes
-          #  if: steps.extract.outputs.skip != 'true' && steps.branch_and_copy.outputs.NO_CHANGES != 'true'
-          #  id: open_pr
-          #  uses: actions/github-script@v7
-          #  with:
-          #    script: |
-          #      const filePath = '${{ steps.extract.outputs.file_path }}';
-          #      const prNumber = Number('${{ steps.extract.outputs.pr_number }}');
-          #      const baseRef = '${{ steps.extract.outputs.base_ref }}';
-          #      const commentUrl = '${{ steps.extract.outputs.comment_url }}';
-          #      const repoFull = '${{ steps.extract.outputs.base_repo }}'; // owner/repo
-          #      const newBranch = '${{ steps.branch_and_copy.outputs.BRANCH }}';
-
-          #      const [owner, repo] = repoFull.split('/');
-
-          #      const title = `Extract: ${filePath} from PR #${prNumber}`;
-          #      const body = [
-          #        `This PR was automatically created from a review comment on PR #${prNumber}.`,
-          #        ``,
-          #        `It includes *only* the changes from that PR to:`,
-          #        `- \`${filePath}\``,
-          #        ``,
-          #        `Original review comment: ${commentUrl}`,
-          #      ].join('\n');
-
-          #      const created = await github.rest.pulls.create({
-          #        owner, repo,
-          #        title,
-          #        head: newBranch,
-          #        base: baseRef,
-          #        body
-          #      });
-
-          #      core.setOutput('new_pr_number', String(created.data.number));
-          #      core.setOutput('new_pr_url', created.data.html_url);
 
       - name: Comment back on the original PR
         if: steps.extract.outputs.skip != 'true' && steps.branch_and_copy.outputs.NO_CHANGES != 'true'
         uses: actions/github-script@v7
         with:
           script: |
-            const prNumber = Number('${{ steps.extract.outputs.pr_number }}');
+            const prNumber = Number('${{ steps.cpr.outputs.pull-request-number }}');
             const repoFull = '${{ steps.extract.outputs.base_repo }}';
             const [owner, repo] = repoFull.split('/');
-            const url = '${{ steps.open_pr.outputs.new_pr_url }}';
+            const url = '${{ steps.cpr.outputs.pull-request-url }}';
             const filePath = '${{ steps.extract.outputs.file_path }}';
 
-            const body = `Opened a separate PR for **${filePath}**: ${url}`;
+            const body = `Opened a separate #${prNumber} for **${filePath}**: ${url}`;
             await github.rest.issues.createComment({ owner, repo, issue_number: prNumber, body });
