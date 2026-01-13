@@ -137,7 +137,7 @@ jobs:
 
           git checkout master
           # Create branch from current checkout (which is the base SHA)
-          git switch -c "$BRANCH"
+          #git switch -c "$BRANCH"
 
           # Ensure directory exists for the target file
           mkdir -p "$(dirname "$FILE_PATH")"
@@ -159,9 +159,9 @@ jobs:
           fi
 
           printf $'git commit -m %s\n' "$COMMIT_MSG"
-          git commit -m "$COMMIT_MSG"
-          git push -u origin "${BRANCH}"
-          git diff master..."${BRANCH}"
+          #git commit -m "$COMMIT_MSG"
+          #git push -u origin "${BRANCH}"
+          #git diff master..."${BRANCH}"
           #git checkout master
           ## After: git commit -m "$COMMIT_MSG"
           #git remote set-url origin "https://x-access-token:${{ secrets.PAT }}@github.com/${{ steps.extract.outputs.base_repo }}.git"
@@ -177,7 +177,7 @@ jobs:
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v6
         with:
-          path: head
+          path: base
           #branch:
           base: master
           token: ${{ secrets.GITHUB_TOKEN }}
