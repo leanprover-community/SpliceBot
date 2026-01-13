@@ -167,11 +167,11 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const prNumber = Number('${{ steps.extract.outputs.pr_number }}');
+            const originalPrNumber = Number('${{ steps.extract.outputs.pr_number }}');
             const repoFull = '${{ steps.extract.outputs.base_repo }}';
             const [owner, repo] = repoFull.split('/');
-            const url = '${{ steps.cpr.outputs.pull-request-url }}';
+            const automatedPrNumber = '${{ steps.cpr.outputs.pull-request-pr_number }}';
             const filePath = '${{ steps.extract.outputs.file_path }}';
 
-            const body = `Split off the changes to **${filePath}** in #${prNumber}`;
-            await github.rest.issues.createComment({ owner, repo, issue_number: prNumber, body });
+            const body = `Split off the changes to **${filePath}** in #${automatedPrNumber}`;
+            await github.rest.issues.createComment({ owner, repo, issue_number: originalPrNumber, body });
