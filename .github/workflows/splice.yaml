@@ -135,6 +135,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+          git checkout master
           # Create branch from current checkout (which is the base SHA)
           git switch -c "$BRANCH"
 
@@ -175,7 +176,8 @@ jobs:
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v6
         with:
-          path: head
+          path: base
+          #branch:
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: "chore: automated update"
           title: "Automated update"
