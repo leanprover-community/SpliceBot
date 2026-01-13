@@ -179,41 +179,41 @@ jobs:
           branch: "automation/update-${{ github.run_id }}"
           delete-branch: true
 
-#      - name: Open PR with only this file’s changes
-#        if: steps.extract.outputs.skip != 'true' && steps.branch_and_copy.outputs.NO_CHANGES != 'true'
-#        id: open_pr
-#        uses: actions/github-script@v7
-#        with:
-#          script: |
-#            const filePath = '${{ steps.extract.outputs.file_path }}';
-#            const prNumber = Number('${{ steps.extract.outputs.pr_number }}');
-#            const baseRef = '${{ steps.extract.outputs.base_ref }}';
-#            const commentUrl = '${{ steps.extract.outputs.comment_url }}';
-#            const repoFull = '${{ steps.extract.outputs.base_repo }}'; // owner/repo
-#            const newBranch = '${{ steps.branch_and_copy.outputs.BRANCH }}';
-#
-#            const [owner, repo] = repoFull.split('/');
-#
-#            const title = `Extract: ${filePath} from PR #${prNumber}`;
-#            const body = [
-#              `This PR was automatically created from a review comment on PR #${prNumber}.`,
-#              ``,
-#              `It includes *only* the changes from that PR to:`,
-#              `- \`${filePath}\``,
-#              ``,
-#              `Original review comment: ${commentUrl}`,
-#            ].join('\n');
-#
-#            const created = await github.rest.pulls.create({
-#              owner, repo,
-#              title,
-#              head: newBranch,
-#              base: baseRef,
-#              body
-#            });
-#
-#            core.setOutput('new_pr_number', String(created.data.number));
-#            core.setOutput('new_pr_url', created.data.html_url);
+          #- name: Open PR with only this file’s changes
+          #  if: steps.extract.outputs.skip != 'true' && steps.branch_and_copy.outputs.NO_CHANGES != 'true'
+          #  id: open_pr
+          #  uses: actions/github-script@v7
+          #  with:
+          #    script: |
+          #      const filePath = '${{ steps.extract.outputs.file_path }}';
+          #      const prNumber = Number('${{ steps.extract.outputs.pr_number }}');
+          #      const baseRef = '${{ steps.extract.outputs.base_ref }}';
+          #      const commentUrl = '${{ steps.extract.outputs.comment_url }}';
+          #      const repoFull = '${{ steps.extract.outputs.base_repo }}'; // owner/repo
+          #      const newBranch = '${{ steps.branch_and_copy.outputs.BRANCH }}';
+
+          #      const [owner, repo] = repoFull.split('/');
+
+          #      const title = `Extract: ${filePath} from PR #${prNumber}`;
+          #      const body = [
+          #        `This PR was automatically created from a review comment on PR #${prNumber}.`,
+          #        ``,
+          #        `It includes *only* the changes from that PR to:`,
+          #        `- \`${filePath}\``,
+          #        ``,
+          #        `Original review comment: ${commentUrl}`,
+          #      ].join('\n');
+
+          #      const created = await github.rest.pulls.create({
+          #        owner, repo,
+          #        title,
+          #        head: newBranch,
+          #        base: baseRef,
+          #        body
+          #      });
+
+          #      core.setOutput('new_pr_number', String(created.data.number));
+          #      core.setOutput('new_pr_url', created.data.html_url);
 
       - name: Comment back on the original PR
         if: steps.extract.outputs.skip != 'true' && steps.branch_and_copy.outputs.NO_CHANGES != 'true'
