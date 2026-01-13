@@ -177,7 +177,7 @@ jobs:
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v6
         with:
-          path: base
+          path: head
           #branch:
           base: master
           token: ${{ secrets.GITHUB_TOKEN }}
