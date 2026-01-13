@@ -157,6 +157,7 @@ jobs:
             exit 0
           fi
 
+          printf $'git commit -m %s\n' "$COMMIT_MSG"
           git commit -m "$COMMIT_MSG"
           #git checkout master
           ## After: git commit -m "$COMMIT_MSG"
