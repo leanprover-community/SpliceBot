@@ -167,11 +167,11 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const prNumber = Number('${{ steps.cpr.outputs.pull-request-number }}');
+            const prNumber = Number('${{ steps.extract.outputs.pr_number }}');
             const repoFull = '${{ steps.extract.outputs.base_repo }}';
             const [owner, repo] = repoFull.split('/');
             const url = '${{ steps.cpr.outputs.pull-request-url }}';
             const filePath = '${{ steps.extract.outputs.file_path }}';
 
-            const body = `Opened a separate #${prNumber} for **${filePath}**: ${url}`;
+            const body = `Split off the changes to **${filePath}** in #${prNumber}`;
             await github.rest.issues.createComment({ owner, repo, issue_number: prNumber, body });
