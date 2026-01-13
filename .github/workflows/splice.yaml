@@ -159,7 +159,7 @@ jobs:
           fi
 
           printf $'git commit -m %s\n' "$COMMIT_MSG"
-          git commit -m "$COMMIT_MSG"
+          #git commit -m "$COMMIT_MSG"
           git push -u origin "${BRANCH}"
           git diff master..."${BRANCH}"
           #git checkout master
