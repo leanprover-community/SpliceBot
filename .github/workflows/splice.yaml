@@ -96,6 +96,7 @@ jobs:
           ref: ${{ steps.extract.outputs.base_sha }}
           fetch-depth: 0
           path: base
+          #token: ${{ secrets.PAT }}
 
       - name: Check out HEAD (PR head repo @ head SHA)
         if: steps.extract.outputs.skip != 'true'
@@ -104,11 +105,14 @@ jobs:
           repository: ${{ steps.extract.outputs.head_repo }}
           ref: ${{ steps.extract.outputs.head_sha }}
           fetch-depth: 0
-          path: head
+          p#ath: head
+          token: ${{ secrets.PAT }}
 
       - name: Create branch and copy the single file
         if: steps.extract.outputs.skip != 'true'
         id: branch_and_copy
+        #env:
+        #  PAT: ${{ secrets.PAT }}
         run: |
           set -euo pipefail
 
@@ -154,7 +158,14 @@ jobs:
           fi
 
           git commit -m "$COMMIT_MSG"
-          git push --set-upstream origin "$BRANCH"
+          # After: git commit -m "$COMMIT_MSG"
+          git remote set-url origin "https://x-access-token:${{ secrets.PAT }}@github.com/${{ steps.extract.outputs.base_repo }}.git"
+
+          # Fetch the remote branch (if any) to make --force-with-lease meaningful
+          git fetch origin "${BRANCH}" || true
+
+          # Safer force push that refuses if remote moved unexpectedly
+          git push --force-with-lease=origin/${BRANCH} origin "${BRANCH}"
 
           echo "NO_CHANGES=false" | tee -a "$GITHUB_OUTPUT"
 
