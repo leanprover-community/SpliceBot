@@ -155,8 +155,8 @@ jobs:
           path: base
           base: master
           token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "chore: automated update"
-          title: "Automated update"
+          commit-message: "Automated addition of changes in ${{ steps.extract.outputs.file_path }}"
+          title: "chore(${{ steps.extract.outputs.file_path }}): automated extraction"
           body: "This PR was automatically created from a review comment on PR #${{ steps.extract.outputs.pr_number }}."
           branch: ${{ steps.branch_and_copy.outputs.BRANCH }}
           branch-suffix: random
