@@ -176,7 +176,7 @@ jobs:
         uses: peter-evans/create-pull-request@v6
         with:
           path: base
-          #base: master
+          base: ${{ steps.branch_and_copy.outputs.BRANCH }} #master
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: "chore: automated update"
           title: "Automated update"
