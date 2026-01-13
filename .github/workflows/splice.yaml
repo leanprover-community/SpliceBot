@@ -158,7 +158,7 @@ jobs:
           fi
 
           git commit -m "$COMMIT_MSG"
-          git checkout master
+          #git checkout master
           ## After: git commit -m "$COMMIT_MSG"
           #git remote set-url origin "https://x-access-token:${{ secrets.PAT }}@github.com/${{ steps.extract.outputs.base_repo }}.git"
 
