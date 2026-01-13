@@ -105,7 +105,7 @@ jobs:
           repository: ${{ steps.extract.outputs.head_repo }}
           ref: ${{ steps.extract.outputs.head_sha }}
           fetch-depth: 0
-          p#ath: head
+          #path: head
           token: ${{ secrets.PAT }}
 
       - name: Create branch and copy the single file
