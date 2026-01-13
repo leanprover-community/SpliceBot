@@ -181,7 +181,7 @@ jobs:
           commit-message: "chore: automated update"
           title: "Automated update"
           body: "This PR was automatically created from a review comment on PR #${{ steps.extract.outputs.pr_number }}."
-          branch: ${{ steps.branch_and_copy.outputs.BRANCH }} #"automation/update-${{ github.run_id }}"
+          #branch: ${{ steps.branch_and_copy.outputs.BRANCH }} #"automation/update-${{ github.run_id }}"
           delete-branch: true
 
           #- name: Open PR with only this file’s changes
