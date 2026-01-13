@@ -3,13 +3,12 @@ name: Create single-file PR from review comment
 
 on:
   pull_request_review_comment:
-    types: [created]   # you can add 'edited' too if desired
+    types: [created]   # add 'edited' if you want to trigger on edits too
 
 permissions:
   contents: write         # needed to push a branch
   pull-requests: write    # needed to open a PR
 
-# Prevent duplicate runs for the same PR+file if people click twice
 concurrency:
   group: per-file-extract-${{ github.event.pull_request.number }}-${{ github.event.comment.path || 'no-path' }}
   cancel-in-progress: false
@@ -23,13 +22,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Validate event & extract essentials
+      - name: Extract essentials from event (and optionally filter for suggestions)
         id: extract
         uses: actions/github-script@v7
         with:
           script: |
-            const { context, core } = { context: github, core };
-
+            // NOTE: In actions/github-script, `core`, `github`, and `context` are provided globally.
             const comment = context.payload?.comment;
             const pr = context.payload?.pull_request;
 
@@ -136,10 +134,10 @@ jobs:
           # Create branch from current checkout (which is the base SHA)
           git switch -c "$BRANCH"
 
-          # Ensure directory exists
+          # Ensure directory exists for the target file
           mkdir -p "$(dirname "$FILE_PATH")"
 
-          # Decide whether file exists in PR head
+          # Copy or delete the file to match HEAD state
           if [ -f "../head/${FILE_PATH}" ]; then
             echo "Copying file from PR head: ${FILE_PATH}"
             cp -f "../head/${FILE_PATH}" "${FILE_PATH}"
@@ -166,13 +164,12 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const branch = core.getInput('branch', { required: false }) || process.env.BRANCH;
-            // Pull values from previous steps’ outputs
             const filePath = '${{ steps.extract.outputs.file_path }}';
             const prNumber = Number('${{ steps.extract.outputs.pr_number }}');
             const baseRef = '${{ steps.extract.outputs.base_ref }}';
             const commentUrl = '${{ steps.extract.outputs.comment_url }}';
             const repoFull = '${{ steps.extract.outputs.base_repo }}'; // owner/repo
+            const newBranch = '${{ steps.branch_and_copy.outputs.BRANCH }}';
 
             const [owner, repo] = repoFull.split('/');
 
@@ -186,11 +183,10 @@ jobs:
               `Original review comment: ${commentUrl}`,
             ].join('\n');
 
-            // The branch name was output earlier
             const created = await github.rest.pulls.create({
               owner, repo,
               title,
-              head: '${{ steps.branch_and_copy.outputs.BRANCH }}',
+              head: newBranch,
               base: baseRef,
               body
             });
