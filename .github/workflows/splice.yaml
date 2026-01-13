@@ -175,14 +175,21 @@ jobs:
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v6
         with:
-          path: head
-          base: ${{ steps.branch_and_copy.outputs.BRANCH }} #master
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: "chore: automated update"
           title: "Automated update"
           body: "This PR was automatically created from a review comment on PR #${{ steps.extract.outputs.pr_number }}."
-          #branch: ${{ steps.branch_and_copy.outputs.BRANCH }} #"automation/update-${{ github.run_id }}"
+          branch: "automation/update-${{ github.run_id }}"
           delete-branch: true
+
+          #path: head
+          #base: ${{ steps.branch_and_copy.outputs.BRANCH }} #master
+          #token: ${{ secrets.GITHUB_TOKEN }}
+          #commit-message: "chore: automated update"
+          #title: "Automated update"
+          #body: "This PR was automatically created from a review comment on PR #${{ steps.extract.outputs.pr_number }}."
+          ##branch: ${{ steps.branch_and_copy.outputs.BRANCH }} #"automation/update-${{ github.run_id }}"
+          #delete-branch: true
 
           #- name: Open PR with only this file’s changes
           #  if: steps.extract.outputs.skip != 'true' && steps.branch_and_copy.outputs.NO_CHANGES != 'true'
