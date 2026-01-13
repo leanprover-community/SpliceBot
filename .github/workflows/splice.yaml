@@ -1,48 +1,213 @@
 
-name: Log PR Comment JSON
+name: Create single-file PR from review comment
 
 on:
-  # the PR receives a comment
-  #issue_comment:
-  #  types: [created, edited]
-  # the PR receives a review
-  #pull_request_review:
-  #  # whether or not it is accompanied by a comment
-  #  types: [submitted]
-  # the PR receives a review comment
   pull_request_review_comment:
-    types: [created, edited]
+    types: [created]   # you can add 'edited' too if desired
+
+permissions:
+  contents: write         # needed to push a branch
+  pull-requests: write    # needed to open a PR
+
+# Prevent duplicate runs for the same PR+file if people click twice
+concurrency:
+  group: per-file-extract-${{ github.event.pull_request.number }}-${{ github.event.comment.path || 'no-path' }}
+  cancel-in-progress: false
+
+env:
+  # If true, only act on comments that contain a fenced ```suggestion block
+  ONLY_SUGGESTIONS: "true"
 
 jobs:
-  log-comment-json:
+  create-single-file-pr:
     runs-on: ubuntu-latest
-    steps:
-      - name: Log the event payload
-        run: |
-          echo "Logging the JSON payload for the pull request comment..."
-          echo '${{ toJson(github.event) }}'
 
-      - name: Extract file path & filename from review comment
+    steps:
+      - name: Validate event & extract essentials
         id: extract
         uses: actions/github-script@v7
         with:
           script: |
-            // The path to the file where the suggestion / review comment is located
-            const path = context.payload?.comment?.path;
+            const { context, core } = { context: github, core };
+
+            const comment = context.payload?.comment;
+            const pr = context.payload?.pull_request;
+
+            if (!comment) {
+              core.setFailed("No comment payload found.");
+              return;
+            }
+            const path = comment.path;
             if (!path) {
-              core.setFailed("No file path found on this review comment payload.");
+              core.setFailed("This review comment is not on a file diff (no .path). Nothing to do.");
               return;
             }
 
-            // Derive just the filename from the path
-            const filename = path.split('/').pop();
+            const body = comment.body || "";
+            const onlySuggestions = process.env.ONLY_SUGGESTIONS === "true";
+            const hasSuggestion = body.includes("```suggestion");
+            if (onlySuggestions && !hasSuggestion) {
+              core.info("ONLY_SUGGESTIONS=true and the comment is not a suggestion. Skipping.");
+              core.setOutput("skip", "true");
+              return;
+            }
 
-            core.info(`Found file path: ${path}`);
+            if (!pr) {
+              core.setFailed("No pull_request object on this event.");
+              return;
+            }
+
+            // Gather PR metadata
+            const prNumber = pr.number;
+            const baseRef = pr.base?.ref;
+            const baseSha = pr.base?.sha;
+            const baseRepoFullName = pr.base?.repo?.full_name;
+            const headRef = pr.head?.ref;
+            const headSha = pr.head?.sha;
+            const headRepoFullName = pr.head?.repo?.full_name;
+
+            if (!baseSha || !headSha || !baseRepoFullName || !headRepoFullName || !baseRef) {
+              core.setFailed("Missing required PR details (base/head sha/ref/repo).");
+              return;
+            }
+
+            const filename = path.split("/").pop();
+            const commentUrl = comment.html_url;
+
+            core.info(`File path: ${path}`);
             core.info(`Filename: ${filename}`);
+            core.info(`PR #${prNumber} | base: ${baseRef}@${baseSha} | head: ${headRef}@${headSha}`);
+            core.info(`head repo: ${headRepoFullName} | base repo: ${baseRepoFullName}`);
 
-            core.setOutput('file_path', path);
-            core.setOutput('file_name', filename);
-      - name: Example use of outputs
+            core.setOutput("skip", "false");
+            core.setOutput("file_path", path);
+            core.setOutput("file_name", filename);
+            core.setOutput("pr_number", String(prNumber));
+            core.setOutput("base_ref", baseRef);
+            core.setOutput("base_sha", baseSha);
+            core.setOutput("base_repo", baseRepoFullName);
+            core.setOutput("head_sha", headSha);
+            core.setOutput("head_repo", headRepoFullName);
+            core.setOutput("comment_url", commentUrl);
+
+      - name: Check out BASE (PR base repo @ base SHA)
+        if: steps.extract.outputs.skip != 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ steps.extract.outputs.base_repo }}
+          ref: ${{ steps.extract.outputs.base_sha }}
+          fetch-depth: 0
+          path: base
+
+      - name: Check out HEAD (PR head repo @ head SHA)
+        if: steps.extract.outputs.skip != 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ steps.extract.outputs.head_repo }}
+          ref: ${{ steps.extract.outputs.head_sha }}
+          fetch-depth: 0
+          path: head
+
+      - name: Create branch and copy the single file
+        if: steps.extract.outputs.skip != 'true'
+        id: branch_and_copy
         run: |
-          echo "File path: ${{ steps.extract.outputs.file_path }}"
-          echo "File name: ${{ steps.extract.outputs.file_name }}"
+          set -euo pipefail
+
+          FILE_PATH="${{ steps.extract.outputs.file_path }}"
+          FILE_NAME="${{ steps.extract.outputs.file_name }}"
+          PR_NUMBER="${{ steps.extract.outputs.pr_number }}"
+          BASE_REF="${{ steps.extract.outputs.base_ref }}"
+          HEAD_SHA="${{ steps.extract.outputs.head_sha }}"
+
+          # Sanitize a branch-safe token from the filename (replace / and spaces)
+          #SAFE_FILE="${FILE_PATH//\//-}"
+          #SAFE_FILE="${SAFE_FILE// /-}"
+          SAFE_FILE="$(echo "$FILE_PATH" | sed 's/[^0-9A-Z]*//g' | tr -d '\n')"
+          SHORT_SHA="$(echo "$HEAD_SHA" | cut -c1-7)"
+          BRANCH="per-file-${PR_NUMBER}-${SAFE_FILE}-${SHORT_SHA}"
+
+          echo "BRANCH=$BRANCH" | tee -a "$GITHUB_OUTPUT"
+
+          cd base
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Create branch from current checkout (which is the base SHA)
+          git switch -c "$BRANCH"
+
+          # Ensure directory exists
+          mkdir -p "$(dirname "$FILE_PATH")"
+
+          # Decide whether file exists in PR head
+          if [ -f "../head/${FILE_PATH}" ]; then
+            echo "Copying file from PR head: ${FILE_PATH}"
+            cp -f "../head/${FILE_PATH}" "${FILE_PATH}"
+            git add "${FILE_PATH}"
+            COMMIT_MSG="chore: extract changes to ${FILE_PATH} from PR #${PR_NUMBER}"
+          else
+            echo "File not present at PR head path: ${FILE_PATH}"
+          fi
+
+          if git diff --cached --quiet; then
+            echo "No changes staged for ${FILE_PATH} vs base ${BASE_REF}"
+            echo "NO_CHANGES=true" | tee -a "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git commit -m "$COMMIT_MSG"
+          git push --set-upstream origin "$BRANCH"
+
+          echo "NO_CHANGES=false" | tee -a "$GITHUB_OUTPUT"
+
+      - name: Open PR with only this file’s changes
+        if: steps.extract.outputs.skip != 'true' && steps.branch_and_copy.outputs.NO_CHANGES != 'true'
+        id: open_pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const branch = core.getInput('branch', { required: false }) || process.env.BRANCH;
+            // Pull values from previous steps’ outputs
+            const filePath = '${{ steps.extract.outputs.file_path }}';
+            const prNumber = Number('${{ steps.extract.outputs.pr_number }}');
+            const baseRef = '${{ steps.extract.outputs.base_ref }}';
+            const commentUrl = '${{ steps.extract.outputs.comment_url }}';
+            const repoFull = '${{ steps.extract.outputs.base_repo }}'; // owner/repo
+
+            const [owner, repo] = repoFull.split('/');
+
+            const title = `Extract: ${filePath} from PR #${prNumber}`;
+            const body = [
+              `This PR was automatically created from a review comment on PR #${prNumber}.`,
+              ``,
+              `It includes *only* the changes from that PR to:`,
+              `- \`${filePath}\``,
+              ``,
+              `Original review comment: ${commentUrl}`,
+            ].join('\n');
+
+            // The branch name was output earlier
+            const created = await github.rest.pulls.create({
+              owner, repo,
+              title,
+              head: '${{ steps.branch_and_copy.outputs.BRANCH }}',
+              base: baseRef,
+              body
+            });
+
+            core.setOutput('new_pr_number', String(created.data.number));
+            core.setOutput('new_pr_url', created.data.html_url);
+
+      - name: Comment back on the original PR
+        if: steps.extract.outputs.skip != 'true' && steps.branch_and_copy.outputs.NO_CHANGES != 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = Number('${{ steps.extract.outputs.pr_number }}');
+            const repoFull = '${{ steps.extract.outputs.base_repo }}';
+            const [owner, repo] = repoFull.split('/');
+            const url = '${{ steps.open_pr.outputs.new_pr_url }}';
+            const filePath = '${{ steps.extract.outputs.file_path }}';
+
+            const body = `Opened a separate PR for **${filePath}**: ${url}`;
+            await github.rest.issues.createComment({ owner, repo, issue_number: prNumber, body });
