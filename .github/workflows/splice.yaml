@@ -170,7 +170,7 @@ jobs:
             const originalPrNumber = Number('${{ steps.extract.outputs.pr_number }}');
             const repoFull = '${{ steps.extract.outputs.base_repo }}';
             const [owner, repo] = repoFull.split('/');
-            const automatedPrNumber = '${{ steps.cpr.outputs.pull-request-pr_number }}';
+            const automatedPrNumber = '${{ steps.cpr.outputs.pull-request-number }}';
             const filePath = '${{ steps.extract.outputs.file_path }}';
 
             const body = `Split off the changes to **${filePath}** in #${automatedPrNumber}`;
