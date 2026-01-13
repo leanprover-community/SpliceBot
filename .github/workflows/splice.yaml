@@ -178,6 +178,7 @@ jobs:
         with:
           path: base
           #branch:
+          base: master
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: "chore: automated update"
           title: "Automated update"
