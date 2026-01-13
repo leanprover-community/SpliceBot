@@ -93,7 +93,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ${{ steps.extract.outputs.base_repo }}
-          ref: ${{ steps.extract.outputs.base_sha }}
+          ref: master #${{ steps.extract.outputs.base_sha }}
           fetch-depth: 0
           path: base
           #token: ${{ secrets.PAT }}
@@ -103,7 +103,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ${{ steps.extract.outputs.head_repo }}
-          ref: ${{ steps.extract.outputs.head_sha }}
+          #ref: ${{ steps.extract.outputs.head_sha }}
           fetch-depth: 0
           path: head
           #token: ${{ secrets.PAT }}
