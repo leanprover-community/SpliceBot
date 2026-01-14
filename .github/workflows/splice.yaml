@@ -8,6 +8,11 @@ on:
         required: false
         type: string
         default: master
+      trigger_string:
+        description: 'Command string that must appear at the start of a line in the review comment'
+        required: false
+        type: string
+        default: splice-bot
 
 permissions:
   contents: write         # needed to push a branch
@@ -22,20 +27,31 @@ jobs:
         id: extract
         uses: actions/github-script@v7
         env:
-          # Pass the reusable input down to the script and emit it as an output named base_ref
           BASE_REF_INPUT: ${{ inputs.base_ref }}
+          TRIGGER_STRING: ${{ inputs.trigger_string }}
         with:
           script: |
-            // NOTE: In actions/github-script, `core`, `github`, and `context` are provided globally.
+            // --- Helpers ---
+            // Escape string for safe usage inside a RegExp literal (treat user input as plain text)
+            function escapeForRegex(s) {
+              return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            }
+
             const comment = context.payload?.comment;
             const pr = context.payload?.pull_request;
             const body = comment?.body || "";
+            const trigger = process.env.TRIGGER_STRING || "splice-bot";
+            const baseRefFromInput = process.env.BASE_REF_INPUT || "master";
 
+            core.info(`Trigger string: "${trigger}"`);
+            core.info(`Escaped to: "${escapeForRegex(trigger)}"`);
             core.info(`Comment body:\n---\n${body}\n---`);
 
-            // Start-of-line match across lines; no leading whitespace allowed
-            if (!/^splice-bot\b/im.test(body)) {
-              core.info("No `splice-bot` found at the start of a line, skipping.");
+            // Build regex: start-of-line, no leading whitespace, case-insensitive, multiline
+            const pattern = new RegExp(`^${escapeForRegex(trigger)}\\b`, 'im');
+
+            if (!pattern.test(body)) {
+              core.info(`No "${trigger}" found at the start of any line, skipping.`);
               core.setOutput("skip", "true");
               return;
             }
@@ -55,30 +71,26 @@ jobs:
 
             // Gather PR metadata (for logging and outputs)
             const prNumber = pr.number;
-            const baseSha = pr.base?.sha;
             const baseRepoFullName = pr.base?.repo?.full_name;
             const headSha = pr.head?.sha;
             const headRepoFullName = pr.head?.repo?.full_name;
 
-            if (!baseSha || !headSha || !baseRepoFullName || !headRepoFullName) {
-              core.info("Missing required PR details (base/head sha/repo).");
+            if (!baseRepoFullName || !headRepoFullName || !headSha) {
+              core.info("Missing required PR details (base/head repos or head sha).");
               core.setOutput("skip", "true");
               return;
             }
 
             const filename = path.split("/").pop();
-            const baseRefFromInput = process.env.BASE_REF_INPUT || "master";
-
             core.info(`File path: ${path}`);
             core.info(`Filename: ${filename}`);
             core.info(`PR #${prNumber} | base: ${baseRefFromInput} | head sha: ${headSha}`);
             core.info(`head repo: ${headRepoFullName} | base repo: ${baseRepoFullName}`);
 
-            // Outputs preserved for downstream steps
+            // Outputs for downstream steps
             core.setOutput("skip", "false");
             core.setOutput("file_path", path);
             core.setOutput("pr_number", String(prNumber));
-            // IMPORTANT: base_ref now comes from the reusable workflow input (default master)
             core.setOutput("base_ref", baseRefFromInput);
             core.setOutput("base_repo", baseRepoFullName);
             core.setOutput("head_repo", headRepoFullName);
@@ -110,7 +122,7 @@ jobs:
           PR_NUMBER="${{ steps.extract.outputs.pr_number }}"
           BASE_REF="${{ steps.extract.outputs.base_ref }}"
 
-          # Only keep alphanumeric characters from file name
+          # Only keep alphanumeric characters from file name to make a safe branch name
           SAFE_FILE="$(echo "$FILE_PATH" | sed 's/[^0-9A-Z]*//g' | tr -d '\n')"
           BRANCH="bot/file-${SAFE_FILE}-from-PR${PR_NUMBER}"
 
@@ -125,7 +137,7 @@ jobs:
           # Ensure directory exists for the target file
           mkdir -p "$(dirname "$FILE_PATH")"
 
-          # Copy or delete the file to match HEAD state
+          # Copy the file from HEAD if present
           if [ -f "../head/${FILE_PATH}" ]; then
             echo "Copying file from PR head: ${FILE_PATH}"
             cp -f "../head/${FILE_PATH}" "${FILE_PATH}"
