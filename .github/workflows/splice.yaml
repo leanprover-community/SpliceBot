@@ -34,12 +34,13 @@ jobs:
             }
             const path = comment.path;
             if (!path) {
-              core.setFailed("This review comment is not on a file diff (no .path). Nothing to do.");
+              core.info("This review comment is not on a file diff (no .path). Nothing to do.");
+              core.setOutput("skip", "true");
               return;
             }
 
             if (!pr) {
-              core.setFailed("No pull_request object on this event.");
+              core.info("No pull_request object on this event.");
               return;
             }
 
@@ -53,7 +54,8 @@ jobs:
             const headRepoFullName = pr.head?.repo?.full_name;
 
             if (!baseSha || !headSha || !baseRepoFullName || !headRepoFullName || !baseRef) {
-              core.setFailed("Missing required PR details (base/head sha/ref/repo).");
+              core.info("Missing required PR details (base/head sha/ref/repo).");
+              core.setOutput("skip", "true");
               return;
             }
 
