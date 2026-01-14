@@ -89,7 +89,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ${{ steps.extract.outputs.base_repo }}
-          ref: master
+          ref: ${{ steps.extract.outputs.base_ref }}
           fetch-depth: 0
           path: base
 
