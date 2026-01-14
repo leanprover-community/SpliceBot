@@ -27,7 +27,9 @@ jobs:
             const comment = context.payload?.comment;
             const pr = context.payload?.pull_request;
 
-            if (!comment) {
+
+            if (!comment?.body?.startsWith("splice-bot")) {
+            #if (!comment) {
               core.setFailed("No comment payload found.");
               return;
             }
