@@ -43,8 +43,8 @@ jobs:
 # Inputs
 
 | Name       | Type   | Required | Default  | Description                                                    |
-| ---------- | ------ | -------- | -------- | -------------------------------------------------------------- |
-| `base_ref` | string | No       | `master` | The base branch from which the single‑file PR will be created. |
+| ---------- | ------ | -------- | -------- | --------------------------------------------------- |
+| `base_ref` | string | No       | `master` | The base branch to which the single‑file PR points. |
 
 ***
 
@@ -60,10 +60,10 @@ permissions:
 
 These propagate to the reusable workflow and are required for:
 
-*   checking out code
-*   committing a file
-*   creating a PR
-*   commenting on the original PR
+* checking out code
+* committing a file
+* creating a PR
+* commenting on the original PR
 
 ***
 
