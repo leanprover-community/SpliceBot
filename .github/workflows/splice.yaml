@@ -127,7 +127,6 @@ jobs:
 
           git checkout master
           # Create branch from current checkout (which is the base SHA)
-          #git switch -c "$BRANCH"
 
           # Ensure directory exists for the target file
           mkdir -p "$(dirname "$FILE_PATH")"
@@ -137,7 +136,6 @@ jobs:
             echo "Copying file from PR head: ${FILE_PATH}"
             cp -f "../head/${FILE_PATH}" "${FILE_PATH}"
             git add "${FILE_PATH}"
-            COMMIT_MSG="chore: extract changes to ${FILE_PATH} from PR #${PR_NUMBER}"
           else
             echo "File not present at PR head path: ${FILE_PATH}"
           fi
