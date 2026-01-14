@@ -111,8 +111,9 @@ jobs:
           BASE_REF="${{ steps.extract.outputs.base_ref }}"
 
           # Only keep alphanumeric characters from file name
-          SAFE_FILE="$(echo "$FILE_PATH" | sed 's/[^0-9A-Z]*//g' | tr -d '\n')"
+          SAFE_FILE="$(echo "$FILE_PATH" | sed 's/[^0-9a-zA-Z/._]*//g' | tr -d '\n')"
           BRANCH="bot/file-${SAFE_FILE}-from-PR${PR_NUMBER}"
+          printf $'SAFE_FILE: %s\nBRANCH: %s\n' "${SAFE_FILE}" "${BRANCH}"
 
           echo "BRANCH=$BRANCH" | tee -a "$GITHUB_OUTPUT"
 
