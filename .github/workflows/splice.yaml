@@ -147,7 +147,7 @@ jobs:
         uses: peter-evans/create-pull-request@v6
         with:
           path: base
-          base: master
+          base: ${{ steps.extract.outputs.base_ref }}
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: "Automated addition of changes in ${{ steps.extract.outputs.file_path }}"
           title: "chore(${{ steps.extract.outputs.file_path }}): automated extraction"
