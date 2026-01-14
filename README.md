@@ -90,21 +90,6 @@ Your repository should contain the reusable workflow in:
 
     .github/workflows/splice.yaml
 
-***
-
-# Requirements for Private Repositories
-
-If this workflow is used across **private repos**, ensure:
-
-1.  The reusable workflow repo →
-    **Settings → Actions → General → Access → Accessible from repositories owned by <ORG>**
-
-2.  The caller has sufficient Actions permissions.
-
-3.  The `uses:` reference points to a branch, tag, or SHA containing `workflow_call`.
+where the `.yaml` file can be called whatever you want.
 
 ***
-
-# License
-
-MIT
