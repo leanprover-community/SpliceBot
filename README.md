@@ -1,4 +1,4 @@
-# Split part of a PR into a separate PR
+# `splice-bot`: split part of a PR into a separate PR
 
 This action automates the creation of a **single‑file pull request** when a reviewer writes a PR review comment with a line starting with `splice-bot`.
 
