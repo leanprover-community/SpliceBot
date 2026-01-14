@@ -121,7 +121,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git checkout master
+          git checkout "${BASE_REF}"
           # Create branch from current checkout (which is the base SHA)
 
           # Ensure directory exists for the target file
