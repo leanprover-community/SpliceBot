@@ -147,6 +147,7 @@ jobs:
           fi
 
       - name: Create Pull Request
+        if: steps.extract.outputs.skip != 'true'
         id: cpr
         uses: peter-evans/create-pull-request@v6
         with:
