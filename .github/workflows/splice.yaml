@@ -9,10 +9,6 @@ permissions:
   contents: write         # needed to push a branch
   pull-requests: write    # needed to open a PR
 
-env:
-  # If true, only act on comments that contain a fenced ```suggestion block
-  ONLY_SUGGESTIONS: "false"
-
 jobs:
   create-single-file-pr:
     runs-on: ubuntu-latest
@@ -39,14 +35,6 @@ jobs:
             const path = comment.path;
             if (!path) {
               core.setFailed("This review comment is not on a file diff (no .path). Nothing to do.");
-              return;
-            }
-
-            const onlySuggestions = process.env.ONLY_SUGGESTIONS === "true";
-            const hasSuggestion = body.includes("```suggestion");
-            if (onlySuggestions && !hasSuggestion) {
-              core.info("ONLY_SUGGESTIONS=true and the comment is not a suggestion. Skipping.");
-              core.setOutput("skip", "true");
               return;
             }
 
