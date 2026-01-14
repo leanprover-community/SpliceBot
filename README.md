@@ -28,7 +28,7 @@ on:
 
 jobs:
   call-splice-bot:
-    uses: adomani/SpliceBot/.github/workflows/splice.yaml@master
+    uses: leanprover-community/SpliceBot/.github/workflows/splice.yaml@master
     permissions:
       contents: write
       pull-requests: write
