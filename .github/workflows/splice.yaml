@@ -30,7 +30,7 @@ jobs:
 
             core.info(`Comment body:\n---\n${body}\n---`);
 
-            if (/^splice-bot\b/im.test(body)) {
+            if (/^splice-bot\b/im.test(${body})) {
             //if (!comment) {
               core.info("No `splice-bot` found, skipping.");
               core.setOutput("skip", "true");
