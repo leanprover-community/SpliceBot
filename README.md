@@ -70,10 +70,17 @@ These propagate to the reusable workflow and are required for:
 # Example
 
 In a PR review, comment on a specific file line:
+```
+The changes to this file look great, let's create a separate PR for them!
 
-    splice-bot
+splice-bot
 
-You can add additional text below, but **the trigger must start a line**.
+Thanks!
+```
+
+From the perspective of the action, the only important feature is that one of the lines
+**starts with `splice-bot`**.
+Whether or not there is further text after that, is irrelevant.
 
 ***
 
