@@ -26,8 +26,9 @@ jobs:
             // NOTE: In actions/github-script, `core`, `github`, and `context` are provided globally.
             const comment = context.payload?.comment;
             const pr = context.payload?.pull_request;
+            const body = comment.body || "";
 
-            core.info(`Comment body:\n---\n${comment?.body}\n---`);
+            core.info(`Comment body:\n---\n${body}\n---`);
 
             if (/^splice-bot\b/im.test(body)) {
             //if (!comment) {
@@ -41,7 +42,6 @@ jobs:
               return;
             }
 
-            const body = comment.body || "";
             const onlySuggestions = process.env.ONLY_SUGGESTIONS === "true";
             const hasSuggestion = body.includes("```suggestion");
             if (onlySuggestions && !hasSuggestion) {
