@@ -67,14 +67,10 @@ jobs:
 
             core.setOutput("skip", "false");
             core.setOutput("file_path", path);
-            core.setOutput("file_name", filename);
             core.setOutput("pr_number", String(prNumber));
             core.setOutput("base_ref", baseRef);
-            core.setOutput("base_sha", baseSha);
             core.setOutput("base_repo", baseRepoFullName);
-            core.setOutput("head_sha", headSha);
             core.setOutput("head_repo", headRepoFullName);
-            core.setOutput("comment_url", commentUrl);
 
       - name: Check out BASE (PR base repo @ base SHA)
         if: steps.extract.outputs.skip != 'true'
