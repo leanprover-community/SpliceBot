@@ -20,28 +20,23 @@ The workflow then
 To use this workflow from another repository, create a workflow such as:
 
 ```yaml
-name: Create single-file PR (Trigger on review comment)
+name: splice-bot
 
 on:
   pull_request_review_comment:
-    types: [created, edited]
+    types: [created]
 
 jobs:
   call-splice-bot:
-    uses: YOUR_ORG/YOUR_REPO/.github/workflows/splice.yaml@master
+    uses: adomani/SpliceBot/.github/workflows/splice.yaml@master
     permissions:
       contents: write
       pull-requests: write
     with:
-      # Optional — defaults to "master"
+      # optional branch to which the PR will point — defaults to "master"
       base_ref: master
     secrets: inherit
 ```
-
-Replace:
-
-*   `YOUR_ORG/YOUR_REPO`
-    with the repository containing this reusable workflow.
 
 ***
 
