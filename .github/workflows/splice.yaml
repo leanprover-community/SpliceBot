@@ -113,7 +113,7 @@ jobs:
 
           # Only keep alphanumeric characters from file name
           SAFE_FILE="$(echo "$FILE_PATH" | sed 's/[^0-9A-Z]*//g' | tr -d '\n')"
-          BRANCH="file-${SAFE_FILE}-from-PR${PR_NUMBER}"
+          BRANCH="bot/file-${SAFE_FILE}-from-PR${PR_NUMBER}"
 
           echo "BRANCH=$BRANCH" | tee -a "$GITHUB_OUTPUT"
 
