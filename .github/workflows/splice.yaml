@@ -3,7 +3,7 @@ name: Create single-file PR from review comment
 
 on:
   pull_request_review_comment:
-    types: [created]   # add 'edited' if you want to trigger on edits too
+    types: [created, edited]   # add 'edited' if you want to trigger on edits too
 
 permissions:
   contents: write         # needed to push a branch
