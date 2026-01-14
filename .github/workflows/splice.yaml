@@ -30,7 +30,9 @@ jobs:
 
             if (!comment?.body?.startsWith("splice-bot")) {
             //if (!comment) {
-              core.setFailed("No comment payload found.");
+              core.info(`Comment body:\n---\n${comment?.body}\n---`);
+              core.info("No `splice-bot` found, skipping.");
+              core.setOutput("skip", "true");
               return;
             }
             const path = comment.path;
