@@ -1,23 +1,17 @@
 # Split part of a PR into a separate PR
 
-This action automates the creation of a **single‑file pull request** when a reviewer writes a specially‑formatted comment (`splice-bot`) on a PR review comment.
+This action automates the creation of a **single‑file pull request** when a reviewer writes a PR review comment with a line starting with `splice-bot`.
 
-It is designed to be triggered from another repository using `workflow_call`.
-The typical use case is:
+The typical use case is as follows.
 
-*   A reviewer comments on a diff line with something like:
+A reviewer comments on a diff line with something like: `splice-bot`.
 
-        splice-bot
-
-*   The workflow checks out the **base** and **head** of the PR.
-
-*   It extracts *only the file on which the review comment was made*.
-
-*   It creates a new branch containing only that file change.
-
-*   It opens a pull request with that single-file change.
-
-*   It comments back in the original PR with a link to the new PR.
+The workflow then
+* checks out the **base** and **head** of the PR;
+* extracts *only the file on which the review comment was made*;
+* creates a new branch containing only that file change;
+* opens a pull request with that single-file change;
+* comments back in the original PR with a link to the new PR.
 
 ***
 
