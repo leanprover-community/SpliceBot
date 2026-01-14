@@ -1,0 +1,17 @@
+name: Create single-file PR (Trigger on review comment)
+
+on:
+  pull_request_review_comment:
+    types: [created, edited]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  run-reusable:
+    uses: adomani/TestSplice/.github/workflows/splice.yaml@master
+    with:
+      # Optional override; omit to use the reusable workflow's default "master"
+      base_ref: master
+    secrets: inherit

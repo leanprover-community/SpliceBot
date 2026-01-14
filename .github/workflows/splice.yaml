@@ -1,9 +1,14 @@
 
-name: Create single-file PR from review comment
+name: Create single-file PR from review comment (Reusable)
 
 on:
-  pull_request_review_comment:
-    types: [created, edited]   # add 'edited' if you want to trigger on edits too
+  workflow_call:
+    inputs:
+      base_ref:
+        description: 'Base branch to compare against (optional)'
+        required: false
+        type: string
+        default: master
 
 permissions:
   contents: write         # needed to push a branch
@@ -17,22 +22,26 @@ jobs:
       - name: Extract essentials from event (and optionally filter for suggestions)
         id: extract
         uses: actions/github-script@v7
+        env:
+          # Pass the reusable input down to the script and emit it as an output named base_ref
+          BASE_REF_INPUT: ${{ inputs.base_ref }}
         with:
           script: |
             // NOTE: In actions/github-script, `core`, `github`, and `context` are provided globally.
             const comment = context.payload?.comment;
             const pr = context.payload?.pull_request;
-            const body = comment.body || "";
+            const body = comment?.body || "";
 
             core.info(`Comment body:\n---\n${body}\n---`);
 
+            // Start-of-line match across lines; no leading whitespace allowed
             if (!/^splice-bot\b/im.test(body)) {
-            //if (!comment) {
-              core.info("No `splice-bot` found, skipping.");
+              core.info("No `splice-bot` found at the start of a line, skipping.");
               core.setOutput("skip", "true");
               return;
             }
-            const path = comment.path;
+
+            const path = comment?.path;
             if (!path) {
               core.info("This review comment is not on a file diff (no .path). Nothing to do.");
               core.setOutput("skip", "true");
@@ -41,40 +50,41 @@ jobs:
 
             if (!pr) {
               core.info("No pull_request object on this event.");
+              core.setOutput("skip", "true");
               return;
             }
 
-            // Gather PR metadata
+            // Gather PR metadata (for logging and outputs)
             const prNumber = pr.number;
-            const baseRef = pr.base?.ref;
             const baseSha = pr.base?.sha;
             const baseRepoFullName = pr.base?.repo?.full_name;
-            const headRef = pr.head?.ref;
             const headSha = pr.head?.sha;
             const headRepoFullName = pr.head?.repo?.full_name;
 
-            if (!baseSha || !headSha || !baseRepoFullName || !headRepoFullName || !baseRef) {
-              core.info("Missing required PR details (base/head sha/ref/repo).");
+            if (!baseSha || !headSha || !baseRepoFullName || !headRepoFullName) {
+              core.info("Missing required PR details (base/head sha/repo).");
               core.setOutput("skip", "true");
               return;
             }
 
             const filename = path.split("/").pop();
-            const commentUrl = comment.html_url;
+            const baseRefFromInput = process.env.BASE_REF_INPUT || "master";
 
             core.info(`File path: ${path}`);
             core.info(`Filename: ${filename}`);
-            core.info(`PR #${prNumber} | base: ${baseRef}@${baseSha} | head: ${headRef}@${headSha}`);
+            core.info(`PR #${prNumber} | base: ${baseRefFromInput} | head sha: ${headSha}`);
             core.info(`head repo: ${headRepoFullName} | base repo: ${baseRepoFullName}`);
 
+            // Outputs preserved for downstream steps
             core.setOutput("skip", "false");
             core.setOutput("file_path", path);
             core.setOutput("pr_number", String(prNumber));
-            core.setOutput("base_ref", baseRef);
+            // IMPORTANT: base_ref now comes from the reusable workflow input (default master)
+            core.setOutput("base_ref", baseRefFromInput);
             core.setOutput("base_repo", baseRepoFullName);
             core.setOutput("head_repo", headRepoFullName);
 
-      - name: Check out BASE (PR base repo @ base SHA)
+      - name: Check out BASE (PR base repo @ base_ref)
         if: steps.extract.outputs.skip != 'true'
         uses: actions/checkout@v4
         with:
@@ -83,7 +93,7 @@ jobs:
           fetch-depth: 0
           path: base
 
-      - name: Check out HEAD (PR head repo @ head SHA)
+      - name: Check out HEAD (PR head repo)
         if: steps.extract.outputs.skip != 'true'
         uses: actions/checkout@v4
         with:
@@ -112,7 +122,6 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
           git checkout "${BASE_REF}"
-          # Create branch from current checkout (which is the base SHA)
 
           # Ensure directory exists for the target file
           mkdir -p "$(dirname "$FILE_PATH")"
