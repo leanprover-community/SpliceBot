@@ -9,10 +9,6 @@ permissions:
   contents: write         # needed to push a branch
   pull-requests: write    # needed to open a PR
 
-concurrency:
-  group: per-file-extract-${{ github.event.pull_request.number }}-${{ github.event.comment.path || 'no-path' }}
-  cancel-in-progress: false
-
 env:
   # If true, only act on comments that contain a fenced ```suggestion block
   ONLY_SUGGESTIONS: "false"
