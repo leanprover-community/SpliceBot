@@ -15,18 +15,6 @@ The workflow then
 
 ***
 
-# Features
-
-*   ✔️ Triggered by a `splice-bot` command at the **start of a review comment line**
-*   ✔️ Copies only the commented file from the PR’s head into a clean branch based on the target base branch
-*   ✔️ Automatically commits the file change
-*   ✔️ Opens a pull request through `peter-evans/create-pull-request`
-*   ✔️ Comments back in the original PR linking to the generated PR
-*   ✔️ Supports external repositories
-*   ✔️ Accepts an optional `base_ref` (default: `master`)
-
-***
-
 # Usage
 
 To use this workflow from another repository, create a workflow such as:
