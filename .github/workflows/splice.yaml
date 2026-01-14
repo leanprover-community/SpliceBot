@@ -29,7 +29,7 @@ jobs:
 
             core.info(`Comment body:\n---\n${comment?.body}\n---`);
 
-            if (!comment?.body?.startsWith("splice-bot")) {
+            if (/^splice-bot\b/im.test(body)) {
             //if (!comment) {
               core.info("No `splice-bot` found, skipping.");
               core.setOutput("skip", "true");
