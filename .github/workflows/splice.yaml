@@ -12,14 +12,16 @@ on:
         description: >
           The committer name and email address in the format `Display Name <email@address.com>`.
           Defaults to the GitHub Actions bot user.
+        required: false
         type: string
         default: 'github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>'
       author:
         description: >
           The author name and email address in the format `Display Name <email@address.com>`.
-          Defaults to the user who triggered the workflow run.
+          Defaults to the author of the PR.
+        required: false
         type: string
-        default: '${{ github.actor }} <${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com>'
+        default: '${{ github.event.pull_request.user.login }} <${{ github.event.pull_request.user.id }}+${{ github.event.pull_request.user.login }}@users.noreply.github.com>'
     secrets:
       token:
         description: 'Token used to checkout the repo (change from GITHUB_TOKEN to allow triggering CI)'
