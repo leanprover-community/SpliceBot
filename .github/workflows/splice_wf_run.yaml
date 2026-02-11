@@ -7,10 +7,6 @@ on:
         description: 'Name of the source workflow that emitted the bridge artifact'
         required: true
         type: string
-      expected_head_sha:
-        description: 'Expected head SHA for workflow_run correlation'
-        required: true
-        type: string
     secrets:
       token:
         description: 'Token used to checkout/push (change from GITHUB_TOKEN to allow triggering CI)'
@@ -33,7 +29,6 @@ jobs:
           token: ${{ secrets.token || github.token }}
           artifact: workflow-data
           source_workflow: ${{ inputs.source_workflow }}
-          expected_head_sha: ${{ inputs.expected_head_sha }}
           require_event: pull_request_review_comment
           fail_on_missing: false
           extract: |

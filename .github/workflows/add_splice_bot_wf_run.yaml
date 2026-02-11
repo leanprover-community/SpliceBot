@@ -16,6 +16,5 @@ jobs:
     uses: leanprover-community/SpliceBot/.github/workflows/splice_wf_run.yaml@master
     with:
       source_workflow: ${{ github.event.workflow_run.name }}
-      expected_head_sha: ${{ github.event.workflow_run.head_sha }}
     # secrets:
     #   token: ${{ secrets.SPLICE_BOT_TOKEN }}

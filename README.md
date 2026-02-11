@@ -69,7 +69,6 @@ jobs:
     uses: leanprover-community/SpliceBot/.github/workflows/splice_wf_run.yaml@master
     with:
       source_workflow: ${{ github.event.workflow_run.name }}
-      expected_head_sha: ${{ github.event.workflow_run.head_sha }}
     secrets:
       token: ${{ secrets.SPLICE_BOT_TOKEN }}
 ```
@@ -94,7 +93,6 @@ Prefer passing explicit secrets over `secrets: inherit`.
 | Name                | Type   | Required | Default | Description                                                              |
 | ------------------- | ------ | -------- | ------- | ------------------------------------------------------------------------ |
 | `source_workflow`   | string | Yes      | -       | Name of the source workflow that emitted the bridge artifact.            |
-| `expected_head_sha` | string | Yes      | -       | Expected head SHA used to correlate the source workflow run.             |
 
 Optional secret for `splice_wf_run.yaml`:
 
