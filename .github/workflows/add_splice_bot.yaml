@@ -4,9 +4,7 @@ on:
   pull_request_review_comment:
     types: [created, edited]
 
-permissions:
-  contents: write
-  pull-requests: write
+permissions: {}
 
 jobs:
   run-reusable:
@@ -14,4 +12,3 @@ jobs:
     with:
       # Optional override; omit to use the reusable workflow's default "master"
       base_ref: master
-    secrets: inherit
