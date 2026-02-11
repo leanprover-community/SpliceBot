@@ -30,6 +30,7 @@ jobs:
         id: bridge
         uses: leanprover-community/privilege-escalation-bridge/consume@v1
         with:
+          token: ${{ secrets.token || github.token }}
           artifact: workflow-data
           source_workflow: ${{ inputs.source_workflow }}
           expected_head_sha: ${{ inputs.expected_head_sha }}
