@@ -36,6 +36,22 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Verify caller event is pull_request_review_comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const eventName = context.eventName;
+            const hasReviewCommentPayload = !!(context.payload?.comment && context.payload?.pull_request);
+
+            if (eventName !== "pull_request_review_comment" && !hasReviewCommentPayload) {
+              core.setFailed(
+                `This workflow must be called from a pull_request_review_comment trigger; got ${eventName}.`
+              );
+              return;
+            }
+
+            core.info(`Trigger OK: ${eventName}`);
+
       - name: Extract essentials from event (and optionally filter for suggestions)
         id: extract
         uses: actions/github-script@v7
