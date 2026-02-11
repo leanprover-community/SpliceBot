@@ -100,7 +100,7 @@ Optional secret for `splice_wf_run.yaml`:
 
 | Name    | Required | Description                                                                      |
 | ------- | -------- | -------------------------------------------------------------------------------- |
-| `token` | Yes if you want to trigger CI       | Token used for checkout/push. Defaults to `github.token`. Prefer explicitly passing a dedicated secret (for example `SPLICE_BOT_TOKEN`) rather than `secrets: inherit`. |
+| `token` | Yes if you want to trigger CI       | Token used for artifact download, checkout, and push. Defaults to `github.token`. Prefer explicitly passing a dedicated secret (for example `SPLICE_BOT_TOKEN`) rather than `secrets: inherit`. |
 
 ***
 
