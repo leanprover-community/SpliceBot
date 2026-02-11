@@ -1,0 +1,136 @@
+name: Create single-file PR from review comment (workflow_run)
+
+on:
+  workflow_call:
+    inputs:
+      source_workflow:
+        description: 'Name of the source workflow that emitted the bridge artifact'
+        required: true
+        type: string
+      expected_head_sha:
+        description: 'Expected head SHA for workflow_run correlation'
+        required: true
+        type: string
+    secrets:
+      token:
+        description: 'Token used to checkout/push (change from GITHUB_TOKEN to allow triggering CI)'
+        required: false
+
+permissions:
+  actions: read
+  contents: write
+  pull-requests: write
+
+jobs:
+  create-single-file-pr:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Consume bridge artifact
+        id: bridge
+        uses: leanprover-community/privilege-escalation-bridge/consume@v1
+        with:
+          artifact: workflow-data
+          source_workflow: ${{ inputs.source_workflow }}
+          expected_head_sha: ${{ inputs.expected_head_sha }}
+          require_event: pull_request_review_comment
+          fail_on_missing: false
+          extract: |
+            pr_number=meta.pr_number
+            file_path=event.comment.path
+            base_ref=outputs.base_ref
+            base_repo=event.pull_request.base.repo.full_name
+            head_repo=event.pull_request.head.repo.full_name
+            committer=outputs.committer
+            author=outputs.author
+
+      - name: Check out BASE (PR base repo @ base_ref)
+        if: steps.bridge.outputs.file_path != ''
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.token || github.token }}
+          repository: ${{ steps.bridge.outputs.base_repo }}
+          ref: ${{ steps.bridge.outputs.base_ref }}
+          fetch-depth: 0
+          path: base
+
+      - name: Check out HEAD (PR head repo)
+        if: steps.bridge.outputs.file_path != ''
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.token || github.token }}
+          repository: ${{ steps.bridge.outputs.head_repo }}
+          fetch-depth: 0
+          path: head
+
+      - name: Create branch and copy the single file
+        if: steps.bridge.outputs.file_path != ''
+        id: branch_and_copy
+        run: |
+          set -euo pipefail
+
+          FILE_PATH="${{ steps.bridge.outputs.file_path }}"
+          PR_NUMBER="${{ steps.bridge.outputs.pr_number }}"
+          BASE_REF="${{ steps.bridge.outputs.base_ref }}"
+
+          # Only keep alphanumeric characters from file name
+          SAFE_FILE="$(echo "$FILE_PATH" | sed 's/[^0-9a-zA-Z/._]*//g' | tr -d '\n')"
+          BRANCH="bot/file-${SAFE_FILE}-from-PR${PR_NUMBER}"
+          printf $'SAFE_FILE: %s\nBRANCH: %s\n' "${SAFE_FILE}" "${BRANCH}"
+
+          echo "BRANCH=$BRANCH" | tee -a "$GITHUB_OUTPUT"
+
+          cd base
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git checkout "${BASE_REF}"
+
+          # Ensure directory exists for the target file
+          mkdir -p "$(dirname "$FILE_PATH")"
+
+          # Copy or delete the file to match HEAD state
+          if [ -f "../head/${FILE_PATH}" ]; then
+            echo "Copying file from PR head: ${FILE_PATH}"
+            cp -f "../head/${FILE_PATH}" "${FILE_PATH}"
+            git add "${FILE_PATH}"
+          else
+            echo "File not present at PR head path: ${FILE_PATH}"
+          fi
+
+          if git diff --cached --quiet; then
+            echo "No changes staged for ${FILE_PATH} vs base ${BASE_REF}"
+            echo "NO_CHANGES=true" | tee -a "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+      - name: Create Pull Request
+        if: steps.bridge.outputs.file_path != ''
+        id: cpr
+        uses: peter-evans/create-pull-request@98357b18bf14b5342f975ff684046ec3b2a07725 #v8.0.0
+        with:
+          committer: ${{ steps.bridge.outputs.committer }}
+          author: ${{ steps.bridge.outputs.author }}
+          path: base
+          base: ${{ steps.bridge.outputs.base_ref }}
+          token: ${{ secrets.token || github.token }}
+          commit-message: "Automated addition of changes in ${{ steps.bridge.outputs.file_path }}"
+          title: "chore(${{ steps.bridge.outputs.file_path }}): automated extraction"
+          body: "This PR was automatically created from a review comment on PR #${{ steps.bridge.outputs.pr_number }}."
+          branch: ${{ steps.branch_and_copy.outputs.BRANCH }}
+          branch-suffix: random
+          delete-branch: true
+
+      - name: Comment back on the original PR
+        if: steps.bridge.outputs.file_path != '' && steps.branch_and_copy.outputs.NO_CHANGES != 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const originalPrNumber = Number('${{ steps.bridge.outputs.pr_number }}');
+            const repoFull = '${{ steps.bridge.outputs.base_repo }}';
+            const [owner, repo] = repoFull.split('/');
+            const automatedPrNumber = '${{ steps.cpr.outputs.pull-request-number }}';
+            const filePath = '${{ steps.bridge.outputs.file_path }}';
+
+            const body = `Split off the changes to **${filePath}** in #${automatedPrNumber}`;
+            await github.rest.issues.createComment({ owner, repo, issue_number: originalPrNumber, body });
