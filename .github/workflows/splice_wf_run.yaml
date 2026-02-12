@@ -17,12 +17,34 @@ on:
         required: false
         type: string
         default: ''
+      token_app_owner:
+        description: 'Optional owner used when minting token from a GitHub App installation'
+        required: false
+        type: string
+        default: ''
+      branch_token_app_owner:
+        description: 'Optional owner used when minting branch_token from a GitHub App installation'
+        required: false
+        type: string
+        default: ''
     secrets:
       token:
         description: 'Token used for artifact download, checkout, and PR API calls (change from GITHUB_TOKEN to allow triggering CI)'
         required: false
       branch_token:
         description: 'Optional token used only to push PR branches (for push_to_fork mode)'
+        required: false
+      token_app_id:
+        description: 'Optional GitHub App ID used to mint token when token is not provided'
+        required: false
+      token_app_private_key:
+        description: 'Optional GitHub App private key used to mint token when token is not provided'
+        required: false
+      branch_token_app_id:
+        description: 'Optional GitHub App ID used to mint branch_token when branch_token is not provided'
+        required: false
+      branch_token_app_private_key:
+        description: 'Optional GitHub App private key used to mint branch_token when branch_token is not provided'
         required: false
 
 permissions:
@@ -35,11 +57,29 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Generate token from GitHub App (optional)
+        if: secrets.token == '' && secrets.token_app_id != '' && secrets.token_app_private_key != ''
+        id: token_from_app
+        uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2.2.1
+        with:
+          app-id: ${{ secrets.token_app_id }}
+          private-key: ${{ secrets.token_app_private_key }}
+          owner: ${{ inputs.token_app_owner }}
+
+      - name: Generate branch_token from GitHub App (optional)
+        if: inputs.push_to_fork != '' && secrets.branch_token == '' && (secrets.branch_token_app_id != '' || secrets.token_app_id != '') && (secrets.branch_token_app_private_key != '' || secrets.token_app_private_key != '')
+        id: branch_token_from_app
+        uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2.2.1
+        with:
+          app-id: ${{ secrets.branch_token_app_id || secrets.token_app_id }}
+          private-key: ${{ secrets.branch_token_app_private_key || secrets.token_app_private_key }}
+          owner: ${{ inputs.branch_token_app_owner || inputs.token_app_owner }}
+
       - name: Consume bridge artifact
         id: bridge
         uses: leanprover-community/privilege-escalation-bridge/consume@v1
         with:
-          token: ${{ secrets.token || github.token }}
+          token: ${{ secrets.token || steps.token_from_app.outputs.token || github.token }}
           artifact: workflow-data
           source_workflow: ${{ inputs.source_workflow }}
           require_event: pull_request_review_comment
@@ -57,7 +97,7 @@ jobs:
         if: steps.bridge.outputs.file_path != ''
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          token: ${{ secrets.token || github.token }}
+          token: ${{ secrets.token || steps.token_from_app.outputs.token || github.token }}
           repository: ${{ steps.bridge.outputs.base_repo }}
           ref: ${{ steps.bridge.outputs.base_ref }}
           fetch-depth: 0
@@ -67,7 +107,7 @@ jobs:
         if: steps.bridge.outputs.file_path != ''
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          token: ${{ secrets.token || github.token }}
+          token: ${{ secrets.token || steps.token_from_app.outputs.token || github.token }}
           repository: ${{ steps.bridge.outputs.head_repo }}
           fetch-depth: 0
           path: head
@@ -118,9 +158,9 @@ jobs:
           author: ${{ steps.bridge.outputs.author }}
           path: base
           base: ${{ steps.bridge.outputs.base_ref }}
-          token: ${{ secrets.token || github.token }}
+          token: ${{ secrets.token || steps.token_from_app.outputs.token || github.token }}
           # Fork-only options: when push_to_fork is empty, these resolve to empty strings and CPR uses base-repo branch mode.
-          branch-token: ${{ inputs.push_to_fork != '' && (secrets.branch_token || secrets.token || github.token) || '' }}
+          branch-token: ${{ inputs.push_to_fork != '' && (secrets.branch_token || steps.branch_token_from_app.outputs.token || secrets.token || steps.token_from_app.outputs.token || github.token) || '' }}
           push-to-fork: ${{ inputs.push_to_fork != '' && inputs.push_to_fork || '' }}
           # Default to false in fork mode unless explicitly overridden by caller.
           maintainer-can-modify: ${{ inputs.push_to_fork != '' && (inputs.maintainer_can_modify != '' && inputs.maintainer_can_modify || 'false') || '' }}

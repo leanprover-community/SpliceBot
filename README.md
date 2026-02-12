@@ -85,10 +85,10 @@ jobs:
 `workflow_run.workflows` must match the **exact name** of the trigger workflow.
 Prefer passing explicit secrets over `secrets: inherit`.
 
-### Example: generate GitHub App token(s) in a separate job
+### Example: mint GitHub App token(s) inside the reusable workflow
 
-If you call a reusable workflow via `jobs.<id>.uses`, that job cannot contain `steps`.
-Generate token(s) in a first job, expose them as job outputs, then pass those outputs as secrets to the reusable workflow job.
+`jobs.<id>.uses` jobs cannot have `steps`, and GitHub may block passing generated tokens across jobs via outputs (`Skip output ... since it may contain secret`).
+So this reusable workflow supports passing GitHub App credentials directly; it mints tokens in the same job where checkout and PR creation run.
 
 ```yaml
 name: Create single-file PR (workflow_run)
@@ -104,46 +104,26 @@ permissions:
   pull-requests: write
 
 jobs:
-  generate-tokens:
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
-    runs-on: ubuntu-latest
-    outputs:
-      token: ${{ steps.base-token.outputs.token }}
-      branch_token: ${{ steps.app-token.outputs.token }}
-    steps:
-      - name: Generate base-repo token
-        id: base-token
-        uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2.2.1
-        with:
-          app-id: ${{ secrets.SPLICEBOT_TESTING_APP_ID }}
-          private-key: ${{ secrets.SPLICEBOT_TESTING_PRIVATE_KEY }}
-          # Installation owner that has access to the base repo.
-          owner: your-base-owner
-          # Optional: narrow scope if installation has multiple repos.
-          # repositories: your-base-repo
-
-      - name: Generate fork token
-        id: app-token
-        uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2.2.1
-        with:
-          app-id: ${{ secrets.SPLICEBOT_TESTING_APP_ID }}
-          private-key: ${{ secrets.SPLICEBOT_TESTING_PRIVATE_KEY }}
-          # In fork mode this is typically required: point at the installation owner for the fork.
-          owner: your-fork-owner
-          # Optional: narrow scope if installation has multiple repos.
-          # repositories: your-fork-repo
-
   run-reusable:
-    needs: generate-tokens
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     uses: leanprover-community/SpliceBot/.github/workflows/splice_wf_run.yaml@master
     with:
       source_workflow: ${{ github.event.workflow_run.name }}
+      # Installation owner used when minting token from app credentials below.
+      token_app_owner: your-base-or-fork-owner
+      # Optional override when branch_token should be minted from a different owner.
+      # branch_token_app_owner: your-fork-owner
       push_to_fork: your-fork-owner/your-fork-repo
     secrets:
-      # Token for artifact download/checkout/PR API calls.
-      token: ${{ needs.generate-tokens.outputs.token }}
-      # Token used for branch push into the fork.
-      branch_token: ${{ needs.generate-tokens.outputs.branch_token }}
+      # Optional static token; if omitted, token_app_* below is used.
+      # token: ${{ secrets.SPLICE_BOT_TOKEN }}
+      token_app_id: ${{ secrets.SPLICEBOT_TESTING_APP_ID }}
+      token_app_private_key: ${{ secrets.SPLICEBOT_TESTING_PRIVATE_KEY }}
+      # Optional static branch token; if omitted, branch_token_app_* (or token_app_*) is used.
+      # branch_token: ${{ secrets.SPLICE_BOT_FORK_TOKEN }}
+      # Optional override app credentials for branch_token minting.
+      # branch_token_app_id: ${{ secrets.SPLICEBOT_TESTING_FORK_APP_ID }}
+      # branch_token_app_private_key: ${{ secrets.SPLICEBOT_TESTING_FORK_PRIVATE_KEY }}
 ```
 
 GitHub App token permissions for the example above:
@@ -175,6 +155,8 @@ GitHub App token permissions for the example above:
 | `source_workflow`       | string | Yes      | -       | Name of the source workflow that emitted the bridge artifact.                                               |
 | `push_to_fork`          | string | No       | `''`    | Optional fork destination (`owner/repo`) for PR branches. When empty, branches are pushed to base repo.    |
 | `maintainer_can_modify` | string | No       | `''`    | Optional fork-mode override (`"true"` or `"false"`). If omitted in fork mode, defaults to `"false"`.       |
+| `token_app_owner`       | string | No       | `''`    | Optional owner used when minting `token` from GitHub App credentials.                                      |
+| `branch_token_app_owner`| string | No       | `''`    | Optional owner used when minting `branch_token` from GitHub App credentials.                               |
 
 Branch naming in `splice_wf_run.yaml`:
 
@@ -188,6 +170,10 @@ Optional secrets for `splice_wf_run.yaml`:
 | -------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `token`        | No       | Token used for artifact download, checkout, and PR API calls. Defaults to `github.token`. Use an explicit secret (e.g. `SPLICE_BOT_TOKEN`) if needed. |
 | `branch_token` | No       | Token used only for branch push in fork mode. Defaults to `token` (or `github.token` if `token` is also omitted).                                   |
+| `token_app_id` | No       | GitHub App ID used to mint `token` when `token` is not provided.                                                                                      |
+| `token_app_private_key` | No | GitHub App private key used to mint `token` when `token` is not provided.                                                                          |
+| `branch_token_app_id` | No | GitHub App ID used to mint `branch_token` when `branch_token` is not provided. Defaults to `token_app_id` when omitted.                            |
+| `branch_token_app_private_key` | No | GitHub App private key used to mint `branch_token` when `branch_token` is not provided. Defaults to `token_app_private_key` when omitted. |
 
 Token caveats:
 
