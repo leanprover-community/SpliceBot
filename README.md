@@ -69,12 +69,90 @@ jobs:
     uses: leanprover-community/SpliceBot/.github/workflows/splice_wf_run.yaml@master
     with:
       source_workflow: ${{ github.event.workflow_run.name }}
+      # Optional: push the PR branch to a dedicated fork instead of base repo.
+      # Format: owner/repo
+      # push_to_fork: splice-bot-user/target-repo
+      # Optional in fork mode; defaults to false when omitted.
+      # maintainer_can_modify: "true"
     secrets:
       token: ${{ secrets.SPLICE_BOT_TOKEN }}
+      # Optional: token used only for branch push (useful with push_to_fork).
+      # branch_token: ${{ secrets.SPLICE_BOT_FORK_TOKEN }}
 ```
 
 `workflow_run.workflows` must match the **exact name** of the trigger workflow.
 Prefer passing explicit secrets over `secrets: inherit`.
+
+### Example: generate GitHub App token(s) in a separate job
+
+If you call a reusable workflow via `jobs.<id>.uses`, that job cannot contain `steps`.
+Generate token(s) in a first job, expose them as job outputs, then pass those outputs as secrets to the reusable workflow job.
+
+```yaml
+name: Create single-file PR (workflow_run)
+
+on:
+  workflow_run:
+    workflows: ["Create single-file PR (Trigger on review comment)"]
+    types: [completed]
+
+permissions:
+  actions: read
+  contents: write
+  pull-requests: write
+
+jobs:
+  generate-tokens:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    outputs:
+      token: ${{ steps.base-token.outputs.token }}
+      branch_token: ${{ steps.app-token.outputs.token }}
+    steps:
+      - name: Generate base-repo token
+        id: base-token
+        uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2.2.1
+        with:
+          app-id: ${{ secrets.SPLICEBOT_TESTING_APP_ID }}
+          private-key: ${{ secrets.SPLICEBOT_TESTING_PRIVATE_KEY }}
+          # Installation owner that has access to the base repo.
+          owner: your-base-owner
+          # Optional: narrow scope if installation has multiple repos.
+          # repositories: your-base-repo
+
+      - name: Generate fork token
+        id: app-token
+        uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2.2.1
+        with:
+          app-id: ${{ secrets.SPLICEBOT_TESTING_APP_ID }}
+          private-key: ${{ secrets.SPLICEBOT_TESTING_PRIVATE_KEY }}
+          # In fork mode this is typically required: point at the installation owner for the fork.
+          owner: your-fork-owner
+          # Optional: narrow scope if installation has multiple repos.
+          # repositories: your-fork-repo
+
+  run-reusable:
+    needs: generate-tokens
+    uses: leanprover-community/SpliceBot/.github/workflows/splice_wf_run.yaml@master
+    with:
+      source_workflow: ${{ github.event.workflow_run.name }}
+      push_to_fork: your-fork-owner/your-fork-repo
+    secrets:
+      # Token for artifact download/checkout/PR API calls.
+      token: ${{ needs.generate-tokens.outputs.token }}
+      # Token used for branch push into the fork.
+      branch_token: ${{ needs.generate-tokens.outputs.branch_token }}
+```
+
+GitHub App token permissions for the example above:
+
+* `token` (artifact download, checkout, PR API):
+  * Repository permissions: `Contents: Read`, `Pull requests: Read & write`, `Actions: Read`.
+* `branch_token` (fork branch push):
+  * Repository permissions: `Contents: Read & write` on the fork repo.
+  * `Pull requests` permission is not required if this token is only used for branch pushes.
+* If `branch_token` is omitted (or falls back to `token`), then `token` also needs `Contents: Read & write` for branch updates.
+* If you use one token for both roles, it needs the union of the permissions above (`Contents: Read & write`, `Pull requests: Read & write`, `Actions: Read`).
 
 ***
 
@@ -90,15 +168,26 @@ Prefer passing explicit secrets over `secrets: inherit`.
 
 `splice_wf_run.yaml` inputs:
 
-| Name                | Type   | Required | Default | Description                                                              |
-| ------------------- | ------ | -------- | ------- | ------------------------------------------------------------------------ |
-| `source_workflow`   | string | Yes      | -       | Name of the source workflow that emitted the bridge artifact.            |
+| Name                    | Type   | Required | Default | Description                                                                                                 |
+| ----------------------- | ------ | -------- | ------- | ----------------------------------------------------------------------------------------------------------- |
+| `source_workflow`       | string | Yes      | -       | Name of the source workflow that emitted the bridge artifact.                                               |
+| `push_to_fork`          | string | No       | `''`    | Optional fork destination (`owner/repo`) for PR branches. When empty, branches are pushed to base repo.    |
+| `maintainer_can_modify` | string | No       | `''`    | Optional fork-mode override (`"true"` or `"false"`). If omitted in fork mode, defaults to `"false"`.       |
 
-Optional secret for `splice_wf_run.yaml`:
+Optional secrets for `splice_wf_run.yaml`:
 
-| Name    | Required | Description                                                                      |
-| ------- | -------- | -------------------------------------------------------------------------------- |
-| `token` | Yes if you want to trigger CI       | Token used for artifact download, checkout, and push. Defaults to `github.token`. Prefer explicitly passing a dedicated secret (for example `SPLICE_BOT_TOKEN`) rather than `secrets: inherit`. |
+| Name           | Required | Description                                                                                                                                            |
+| -------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `token`        | No       | Token used for artifact download, checkout, and PR API calls. Defaults to `github.token`. Use an explicit secret (e.g. `SPLICE_BOT_TOKEN`) if needed. |
+| `branch_token` | No       | Token used only for branch push in fork mode. Defaults to `token` (or `github.token` if `token` is also omitted).                                   |
+
+Token caveats:
+
+* If `token` is `github.token`, downstream workflows may not trigger on the bot-created push/PR.
+* If using `push_to_fork`, the branch push token (resolved from `branch_token` then `token`) must have write access to that fork.
+* `maintainer_can_modify` is a GitHub platform capability that is commonly used with user-owned forks; set it explicitly if your repository policy requires it.
+* GitHub does not allow granting push permissions to organization-owned forks, so maintainer-edit behavior differs from user-owned forks ([GitHub docs](https://docs.github.com/pull-requests/collaborating-with-pull-requests/working-with-forks/about-permissions-and-visibility-of-forks)).
+* For additional behavior details and fork setup patterns, see the upstream action guidance ([peter-evans/create-pull-request: Push pull request branches to a fork](https://github.com/peter-evans/create-pull-request/blob/main/docs/concepts-guidelines.md#push-pull-request-branches-to-a-fork)).
 
 ***
 
