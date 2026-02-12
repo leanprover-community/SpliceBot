@@ -4,7 +4,7 @@ This action automates the creation of a **single-file pull request** when a revi
 
 To support PRs from forks safely, setup is split into two workflows:
 
-* `pull_request_review_comment` workflow (read-only): parses comment context and emits a bridge artifact.
+* `pull_request_review_comment` workflow (read-only): parses comment conmits a bridge artifact.
 * `workflow_run` workflow (write permissions): consumes that artifact, creates the split branch/PR, and comments back.
 
 This avoids trying to push with a read-only `GITHUB_TOKEN` from fork-originated PR events.
