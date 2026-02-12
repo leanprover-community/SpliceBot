@@ -176,6 +176,12 @@ GitHub App token permissions for the example above:
 | `push_to_fork`          | string | No       | `''`    | Optional fork destination (`owner/repo`) for PR branches. When empty, branches are pushed to base repo.    |
 | `maintainer_can_modify` | string | No       | `''`    | Optional fork-mode override (`"true"` or `"false"`). If omitted in fork mode, defaults to `"false"`.       |
 
+Branch naming in `splice_wf_run.yaml`:
+
+* Base branch template: `splice-bot/file-<sanitized-file-path>-from-PR<pr-number>`.
+* Sanitization keeps only `[0-9a-zA-Z/._]` from the file path.
+* The final pushed branch includes a random suffix because `create-pull-request` uses `branch-suffix: random`.
+
 Optional secrets for `splice_wf_run.yaml`:
 
 | Name           | Required | Description                                                                                                                                            |

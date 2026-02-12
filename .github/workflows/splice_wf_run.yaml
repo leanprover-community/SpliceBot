@@ -55,7 +55,7 @@ jobs:
 
       - name: Check out BASE (PR base repo @ base_ref)
         if: steps.bridge.outputs.file_path != ''
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           token: ${{ secrets.token || github.token }}
           repository: ${{ steps.bridge.outputs.base_repo }}
@@ -65,7 +65,7 @@ jobs:
 
       - name: Check out HEAD (PR head repo)
         if: steps.bridge.outputs.file_path != ''
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           token: ${{ secrets.token || github.token }}
           repository: ${{ steps.bridge.outputs.head_repo }}
@@ -84,16 +84,12 @@ jobs:
 
           # Only keep alphanumeric characters from file name
           SAFE_FILE="$(echo "$FILE_PATH" | sed 's/[^0-9a-zA-Z/._]*//g' | tr -d '\n')"
-          BRANCH="bot/file-${SAFE_FILE}-from-PR${PR_NUMBER}"
+          BRANCH="splice-bot/file-${SAFE_FILE}-from-PR${PR_NUMBER}"
           printf $'SAFE_FILE: %s\nBRANCH: %s\n' "${SAFE_FILE}" "${BRANCH}"
 
           echo "BRANCH=$BRANCH" | tee -a "$GITHUB_OUTPUT"
 
           cd base
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          git checkout "${BASE_REF}"
 
           # Ensure directory exists for the target file
           mkdir -p "$(dirname "$FILE_PATH")"
