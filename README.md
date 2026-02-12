@@ -179,6 +179,7 @@ Token caveats:
 
 * If `token` is `github.token`, downstream workflows may not trigger on the bot-created push/PR.
 * If using `push_to_fork`, the branch push token (resolved from `branch_token` then `token`) must have write access to that fork.
+* If the selected file is under `.github/workflows/`, the token that pushes the branch must have `Workflows: Read & write` (GitHub rejects workflow-file updates from apps without this permission).
 * `maintainer_can_modify` is a GitHub platform capability that is commonly used with user-owned forks; set it explicitly if your repository policy requires it.
 * GitHub does not allow granting push permissions to organization-owned forks, so maintainer-edit behavior differs from user-owned forks ([GitHub docs](https://docs.github.com/pull-requests/collaborating-with-pull-requests/working-with-forks/about-permissions-and-visibility-of-forks)).
 * For additional behavior details and fork setup patterns, see the upstream action guidance ([peter-evans/create-pull-request: Push pull request branches to a fork](https://github.com/peter-evans/create-pull-request/blob/main/docs/concepts-guidelines.md#push-pull-request-branches-to-a-fork)).
