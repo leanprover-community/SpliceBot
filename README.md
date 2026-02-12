@@ -42,6 +42,8 @@ permissions: {}
 
 jobs:
   run-reusable:
+    # Fast-path filter: skip this job unless the comment mentions splice-bot.
+    if: ${{ contains(github.event.comment.body, 'splice-bot') }}
     uses: leanprover-community/SpliceBot/.github/workflows/splice.yaml@master
     with:
       # Optional override; defaults to "master"
