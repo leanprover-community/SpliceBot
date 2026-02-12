@@ -57,8 +57,37 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Resolve token generation mode
+        id: token_mode
+        env:
+          STATIC_TOKEN: ${{ secrets.token }}
+          STATIC_BRANCH_TOKEN: ${{ secrets.branch_token }}
+          TOKEN_APP_ID: ${{ secrets.token_app_id }}
+          TOKEN_APP_PRIVATE_KEY: ${{ secrets.token_app_private_key }}
+          BRANCH_TOKEN_APP_ID: ${{ secrets.branch_token_app_id }}
+          BRANCH_TOKEN_APP_PRIVATE_KEY: ${{ secrets.branch_token_app_private_key }}
+          PUSH_TO_FORK: ${{ inputs.push_to_fork }}
+        run: |
+          set -euo pipefail
+
+          mint_token=false
+          mint_branch_token=false
+
+          if [ -z "${STATIC_TOKEN}" ] && [ -n "${TOKEN_APP_ID}" ] && [ -n "${TOKEN_APP_PRIVATE_KEY}" ]; then
+            mint_token=true
+          fi
+
+          if [ -n "${PUSH_TO_FORK}" ] && [ -z "${STATIC_BRANCH_TOKEN}" ] && \
+             { [ -n "${BRANCH_TOKEN_APP_ID}" ] || [ -n "${TOKEN_APP_ID}" ]; } && \
+             { [ -n "${BRANCH_TOKEN_APP_PRIVATE_KEY}" ] || [ -n "${TOKEN_APP_PRIVATE_KEY}" ]; }; then
+            mint_branch_token=true
+          fi
+
+          echo "mint_token=${mint_token}" >> "$GITHUB_OUTPUT"
+          echo "mint_branch_token=${mint_branch_token}" >> "$GITHUB_OUTPUT"
+
       - name: Generate token from GitHub App (optional)
-        if: secrets.token == '' && secrets.token_app_id != '' && secrets.token_app_private_key != ''
+        if: steps.token_mode.outputs.mint_token == 'true'
         id: token_from_app
         uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2.2.1
         with:
@@ -67,7 +96,7 @@ jobs:
           owner: ${{ inputs.token_app_owner }}
 
       - name: Generate branch_token from GitHub App (optional)
-        if: inputs.push_to_fork != '' && secrets.branch_token == '' && (secrets.branch_token_app_id != '' || secrets.token_app_id != '') && (secrets.branch_token_app_private_key != '' || secrets.token_app_private_key != '')
+        if: steps.token_mode.outputs.mint_branch_token == 'true'
         id: branch_token_from_app
         uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2.2.1
         with:
