@@ -27,9 +27,9 @@ jobs:
     secrets:
       # Optional static token; if omitted, token_app_* secrets below are used.
       # token: ${{ secrets.SPLICE_BOT_TOKEN }}
-      token_app_id: ${{ secrets.SPLICEBOT_TESTING_APP_ID }}
-      token_app_private_key: ${{ secrets.SPLICEBOT_TESTING_PRIVATE_KEY }}
+      # token_app_id: ${{ secrets.SPLICEBOT_TESTING_APP_ID }}
+      # token_app_private_key: ${{ secrets.SPLICEBOT_TESTING_PRIVATE_KEY }}
       # Optional static branch token; if omitted, branch_token_app_* (or token_app_*) is used.
       # branch_token: ${{ secrets.SPLICE_BOT_FORK_TOKEN }}
-      # branch_token_app_id: ${{ secrets.SPLICEBOT_TESTING_APP_ID }}
-      # branch_token_app_private_key: ${{ secrets.SPLICEBOT_TESTING_PRIVATE_KEY }}
+      branch_token_app_id: ${{ secrets.SPLICEBOT_TESTING_APP_ID }}
+      branch_token_app_private_key: ${{ secrets.SPLICEBOT_TESTING_PRIVATE_KEY }}

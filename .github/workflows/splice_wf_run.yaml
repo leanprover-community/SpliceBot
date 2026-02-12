@@ -72,6 +72,8 @@ jobs:
 
           mint_token=false
           mint_branch_token=false
+          token_source=github.token
+          branch_token_source=not-applicable
 
           if [ -z "${STATIC_TOKEN}" ] && [ -n "${TOKEN_APP_ID}" ] && [ -n "${TOKEN_APP_PRIVATE_KEY}" ]; then
             mint_token=true
@@ -83,8 +85,30 @@ jobs:
             mint_branch_token=true
           fi
 
+          if [ -n "${STATIC_TOKEN}" ]; then
+            token_source=secrets.token
+          elif [ "${mint_token}" = "true" ]; then
+            token_source=app-token
+          fi
+
+          if [ -n "${PUSH_TO_FORK}" ]; then
+            if [ -n "${STATIC_BRANCH_TOKEN}" ]; then
+              branch_token_source=secrets.branch_token
+            elif [ "${mint_branch_token}" = "true" ]; then
+              branch_token_source=app-branch-token
+            elif [ -n "${STATIC_TOKEN}" ]; then
+              branch_token_source=secrets.token
+            elif [ "${mint_token}" = "true" ]; then
+              branch_token_source=app-token
+            else
+              branch_token_source=github.token
+            fi
+          fi
+
           echo "mint_token=${mint_token}" >> "$GITHUB_OUTPUT"
           echo "mint_branch_token=${mint_branch_token}" >> "$GITHUB_OUTPUT"
+          echo "token_source=${token_source}" >> "$GITHUB_OUTPUT"
+          echo "branch_token_source=${branch_token_source}" >> "$GITHUB_OUTPUT"
 
       - name: Generate token from GitHub App (optional)
         if: steps.token_mode.outputs.mint_token == 'true'
@@ -103,6 +127,11 @@ jobs:
           app-id: ${{ secrets.branch_token_app_id || secrets.token_app_id }}
           private-key: ${{ secrets.branch_token_app_private_key || secrets.token_app_private_key }}
           owner: ${{ inputs.branch_token_app_owner || inputs.token_app_owner }}
+
+      - name: Log token source selection
+        run: |
+          echo "token source: ${{ steps.token_mode.outputs.token_source }}"
+          echo "branch-token source: ${{ steps.token_mode.outputs.branch_token_source }}"
 
       - name: Consume bridge artifact
         id: bridge
