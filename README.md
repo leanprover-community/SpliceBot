@@ -184,7 +184,7 @@ Token caveats:
 * Even when the selected file is not a workflow file, this can still be required if the fork branch is behind upstream and the push would introduce upstream commits that modify `.github/workflows/`.
 * Operationally, `Workflows: Read & write` on `branch_token` is lower risk when the app is installed only on the fork repo and Actions are disabled in that fork.
 * `maintainer_can_modify` is a GitHub platform capability that is commonly used with user-owned forks; set it explicitly if your repository policy requires it.
-* GitHub does not allow granting push permissions to organization-owned forks, so maintainer-edit behavior differs from user-owned forks ([GitHub docs](https://docs.github.com/pull-requests/collaborating-with-pull-requests/working-with-forks/about-permissions-and-visibility-of-forks)).
+* GitHub does not allow granting push permissions to organization-owned forks, so maintainer-edit behavior differs from user-owned forks ([GitHub docs](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/working-with-forks/about-permissions-and-visibility-of-forks#about-permissions-of-forks), "You cannot give push permissions to a fork owned by an organization.").
 * For additional behavior details and fork setup patterns, see the upstream action guidance ([peter-evans/create-pull-request: Push pull request branches to a fork](https://github.com/peter-evans/create-pull-request/blob/main/docs/concepts-guidelines.md#push-pull-request-branches-to-a-fork)).
 
 ***
