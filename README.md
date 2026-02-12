@@ -131,10 +131,11 @@ GitHub App token permissions for the example above:
 * `token` (artifact download, checkout, PR API):
   * Repository permissions: `Contents: Read`, `Pull requests: Read & write`, `Actions: Read`.
 * `branch_token` (fork branch push):
-  * Repository permissions: `Contents: Read & write` on the fork repo.
+  * Recommended repository permissions: `Contents: Read & write`, `Workflows: Read & write` on the fork repo (needed because pushes may include `.github/workflows/*` changes, including upstream commits introduced when the fork is behind).
   * `Pull requests` permission is not required if this token is only used for branch pushes.
+  * IMPORTANT: disable GitHub Actions on the fork repo, otherwise users can create and trigger workflows running arbitrary code with the bot.
 * If `branch_token` is omitted (or falls back to `token`), then `token` also needs `Contents: Read & write` for branch updates.
-* If you use one token for both roles, it needs the union of the permissions above (`Contents: Read & write`, `Pull requests: Read & write`, `Actions: Read`).
+* If you use one token for both roles, it needs the union of the permissions above (`Contents: Read & write`, `Workflows: Read & write`, `Pull requests: Read & write`, `Actions: Read`).
 
 ***
 
@@ -180,6 +181,8 @@ Token caveats:
 * If `token` is `github.token`, downstream workflows may not trigger on the bot-created push/PR.
 * If using `push_to_fork`, the branch push token (resolved from `branch_token` then `token`) must have write access to that fork.
 * If the selected file is under `.github/workflows/`, the token that pushes the branch must have `Workflows: Read & write` (GitHub rejects workflow-file updates from apps without this permission).
+* Even when the selected file is not a workflow file, this can still be required if the fork branch is behind upstream and the push would introduce upstream commits that modify `.github/workflows/`.
+* Operationally, `Workflows: Read & write` on `branch_token` is lower risk when the app is installed only on the fork repo and Actions are disabled in that fork.
 * `maintainer_can_modify` is a GitHub platform capability that is commonly used with user-owned forks; set it explicitly if your repository policy requires it.
 * GitHub does not allow granting push permissions to organization-owned forks, so maintainer-edit behavior differs from user-owned forks ([GitHub docs](https://docs.github.com/pull-requests/collaborating-with-pull-requests/working-with-forks/about-permissions-and-visibility-of-forks)).
 * For additional behavior details and fork setup patterns, see the upstream action guidance ([peter-evans/create-pull-request: Push pull request branches to a fork](https://github.com/peter-evans/create-pull-request/blob/main/docs/concepts-guidelines.md#push-pull-request-branches-to-a-fork)).
