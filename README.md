@@ -130,10 +130,12 @@ GitHub App token permissions for the example above:
 
 * `token` (artifact download, checkout, PR API):
   * Repository permissions: `Contents: Read`, `Pull requests: Read & write`, `Actions: Read`.
+  * Install on: an app installation that can access the base repository (where this workflow runs and where the split PR is opened).
 * `branch_token` (fork branch push):
   * Recommended repository permissions: `Contents: Read & write`, `Workflows: Read & write` on the fork repo (needed because pushes may include `.github/workflows/*` changes, including upstream commits introduced when the fork is behind).
   * `Pull requests` permission is not required if this token is only used for branch pushes.
   * IMPORTANT: disable GitHub Actions on the fork repo, otherwise users can create and trigger workflows running arbitrary code with the bot.
+  * Install on: an app installation that can access the fork repository specified by `push_to_fork`.
 * If `branch_token` is omitted (or falls back to `token`), then `token` also needs `Contents: Read & write` for branch updates.
 * If you use one token for both roles, it needs the union of the permissions above (`Contents: Read & write`, `Workflows: Read & write`, `Pull requests: Read & write`, `Actions: Read`).
 
