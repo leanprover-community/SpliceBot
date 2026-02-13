@@ -357,7 +357,10 @@ jobs:
               ? `\n\nFailed step(s): ${failedStepNames.join(', ')}.`
               : '';
             const adviceBlock = adviceLines.map((line) => `- ${line}`).join('\n');
-            const body = `**${title}**\n\n${bodyIntro}${failedStepsLine}\n\nStep outcomes:\n${outcomeLines}\n\nAdvice:\n${adviceBlock}\n\nRun logs: ${runUrl}`;
+            const stepOutcomesDetails = `<details>\n<summary>Step outcomes</summary>\n\n${outcomeLines}\n</details>`;
+            const successBody = `**${title}**\n\n${bodyIntro}`;
+            const failureBody = `**${title}**\n\n${bodyIntro}${failedStepsLine}\n\nAdvice:\n${adviceBlock}\n\nRun logs: ${runUrl}\n\n${stepOutcomesDetails}`;
+            const body = automatedPrNumber ? successBody : failureBody;
 
             try {
               if (Number.isFinite(reviewCommentId) && reviewCommentId > 0) {
