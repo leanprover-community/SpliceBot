@@ -246,8 +246,8 @@ jobs:
           # Fork-only options: when push_to_fork is empty, these resolve to empty strings and CPR uses base-repo branch mode.
           branch-token: ${{ inputs.push_to_fork != '' && (secrets.branch_token || steps.branch_token_from_app.outputs.token || secrets.token || steps.token_from_app.outputs.token || github.token) || '' }}
           push-to-fork: ${{ inputs.push_to_fork != '' && inputs.push_to_fork || '' }}
-          # Default to false in fork mode unless explicitly overridden by caller.
-          maintainer-can-modify: ${{ inputs.push_to_fork != '' && (inputs.maintainer_can_modify != '' && inputs.maintainer_can_modify || 'false') || '' }}
+          # CPR expects a strict boolean; treat any non-"true" value as false.
+          maintainer-can-modify: ${{ inputs.maintainer_can_modify == 'true' }}
           commit-message: "Automated addition of changes in ${{ steps.bridge.outputs.file_path }}"
           title: "chore(${{ steps.bridge.outputs.file_path }}): automated extraction"
           body: "This PR was automatically created from a review comment on PR #${{ steps.bridge.outputs.pr_number }}."
