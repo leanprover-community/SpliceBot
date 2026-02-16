@@ -346,7 +346,9 @@ jobs:
                 adviceLines.push('Inspect the "Stage file changes" logs for git fetch/apply errors and retry after rebasing if needed.');
               }
               if (failedStepNames.includes('Create Pull Request')) {
-                adviceLines.push('Verify token permissions include `contents: write` and `pull-requests: write`; in fork mode, ensure branch token can push to the fork.');
+                adviceLines.push('Check the "Create Pull Request" logs for input validation errors (for example invalid `maintainer-can-modify` values) and other action-level failures.');
+                adviceLines.push('Verify fork settings and branch inputs (`push_to_fork`, branch naming, and whether the target branch already exists) are valid for this repository.');
+                adviceLines.push('Also verify token permissions include `contents: write` and `pull-requests: write`; in fork mode, ensure branch token can push to the fork.');
               }
               if (adviceLines.length === 0) {
                 adviceLines.push('Open the run logs and retry after fixing the reported step failure.');
