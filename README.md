@@ -71,6 +71,16 @@ jobs:
     uses: leanprover-community/SpliceBot/.github/workflows/splice_wf_run.yaml@master
     with:
       source_workflow: ${{ github.event.workflow_run.name }}
+      # Trigger authorization policy:
+      # - allow PR author
+      # - require at least write access for other commenters
+      allow_pr_author: true
+      min_repo_permission: write
+      # Optional explicit allowlists:
+      # allowed_users: |
+      #   trusted-maintainer
+      # allowed_teams: |
+      #   my-org/automation-admins
       # Optional: push the PR branch to a dedicated fork instead of base repo.
       # Format: owner/repo
       # push_to_fork: splice-bot-user/target-repo
@@ -78,6 +88,9 @@ jobs:
       # maintainer_can_modify: "true"
     secrets:
       token: ${{ secrets.SPLICE_BOT_TOKEN }}
+      # Optional: token used only for authorization checks
+      # (collaborator permission / team membership lookups).
+      # authz_token: ${{ secrets.SPLICE_BOT_AUTHZ_TOKEN }}
       # Optional: token used only for branch push (useful with push_to_fork).
       # branch_token: ${{ secrets.SPLICE_BOT_FORK_TOKEN }}
 ```
@@ -109,6 +122,8 @@ jobs:
     uses: leanprover-community/SpliceBot/.github/workflows/splice_wf_run.yaml@master
     with:
       source_workflow: ${{ github.event.workflow_run.name }}
+      allow_pr_author: true
+      min_repo_permission: write
       # Installation owner used when minting token from app credentials below.
       token_app_owner: your-base-or-fork-owner
       # Optional override when branch_token should be minted from a different owner.
@@ -156,10 +171,24 @@ GitHub App token permissions for the example above:
 | Name                    | Type   | Required | Default | Description                                                                                                 |
 | ----------------------- | ------ | -------- | ------- | ----------------------------------------------------------------------------------------------------------- |
 | `source_workflow`       | string | Yes      | -       | Name of the source workflow that emitted the bridge artifact.                                               |
+| `allow_pr_author`       | boolean| No       | `true`  | If `true`, always allow the PR author to trigger splice-bot.                                                |
+| `min_repo_permission`   | string | No       | `anyone`| Minimum repo permission for commenters (`anyone`, `triage`, `write`).                                       |
+| `allowed_teams`         | string | No       | `''`    | Optional comma/newline-separated team allowlist (`team-slug` or `org/team-slug`).                          |
+| `allowed_users`         | string | No       | `''`    | Optional comma/newline-separated GitHub login allowlist.                                                    |
 | `push_to_fork`          | string | No       | `''`    | Optional fork destination (`owner/repo`) for PR branches. When empty, branches are pushed to base repo.    |
 | `maintainer_can_modify` | string | No       | `''`    | Optional fork-mode override (`"true"` or `"false"`). If omitted in fork mode, defaults to `"false"`.       |
 | `token_app_owner`       | string | No       | `''`    | Optional owner used when minting `token` from GitHub App credentials.                                      |
 | `branch_token_app_owner`| string | No       | `''`    | Optional owner used when minting `branch_token` from GitHub App credentials.                               |
+
+Authorization policy notes:
+
+* A comment is authorized when any configured rule matches:
+  * PR author match (`allow_pr_author: true`), or
+  * explicit user allowlist (`allowed_users`), or
+  * minimum repository permission (`min_repo_permission`), or
+  * team membership in `allowed_teams`.
+* `min_repo_permission: anyone` allows all commenters (preserves prior behavior).
+* Team checks require organization-owned repositories and team slugs that the auth-check token can read.
 
 Branch naming in `splice_wf_run.yaml`:
 
@@ -173,6 +202,7 @@ Optional secrets for `splice_wf_run.yaml`:
 | Name           | Required | Description                                                                                                                                            |
 | -------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `token`        | No       | Token used for artifact download, checkout, and PR API calls. Defaults to `github.token`. Use an explicit secret (e.g. `SPLICE_BOT_TOKEN`) if needed. |
+| `authz_token`  | No       | Token used only for authorization checks (collaborator permission and team membership). Falls back to `token`, then `github.token`.                 |
 | `branch_token` | No       | Token used only for branch push in fork mode. Defaults to `token` (or `github.token` if `token` is also omitted).                                   |
 | `token_app_id` | No       | GitHub App ID used to mint `token` when `token` is not provided.                                                                                      |
 | `token_app_private_key` | No | GitHub App private key used to mint `token` when `token` is not provided.                                                                          |
@@ -182,6 +212,8 @@ Optional secrets for `splice_wf_run.yaml`:
 Token caveats:
 
 * If `token` is `github.token`, downstream workflows may not trigger on the bot-created push/PR.
+* Authorization checks fail closed: if policy checks cannot be completed, splice-bot does not proceed.
+* `authz_token` is recommended when using `allowed_teams` or strict permission checks; it can be lower-privilege than write/push tokens.
 * If using `push_to_fork`, the branch push token (resolved from `branch_token` then `token`) must have write access to that fork.
 * If the selected file is under `.github/workflows/`, the token that pushes the branch must have `Workflows: Read & write` (GitHub rejects workflow-file updates from apps without this permission).
 * Even when the selected file is not a workflow file, this can still be required if the fork branch is behind upstream and the push would introduce upstream commits that modify `.github/workflows/`.

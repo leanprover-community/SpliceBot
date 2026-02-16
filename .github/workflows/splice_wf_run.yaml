@@ -7,6 +7,26 @@ on:
         description: 'Name of the source workflow that emitted the bridge artifact'
         required: true
         type: string
+      allow_pr_author:
+        description: 'Whether to always allow the PR author to trigger splice-bot'
+        required: false
+        type: boolean
+        default: true
+      min_repo_permission:
+        description: 'Minimum repo permission allowed to trigger splice-bot (anyone, triage, write)'
+        required: false
+        type: string
+        default: 'anyone'
+      allowed_teams:
+        description: 'Optional comma/newline-separated team allowlist (team-slug or org/team-slug)'
+        required: false
+        type: string
+        default: ''
+      allowed_users:
+        description: 'Optional comma/newline-separated GitHub login allowlist'
+        required: false
+        type: string
+        default: ''
       push_to_fork:
         description: 'Optional fork target in owner/repo form for PR branches'
         required: false
@@ -30,6 +50,9 @@ on:
     secrets:
       token:
         description: 'Token used for artifact download, checkout, and PR API calls (change from GITHUB_TOKEN to allow triggering CI)'
+        required: false
+      authz_token:
+        description: 'Optional token used only for authorization checks (repo permission / team membership)'
         required: false
       branch_token:
         description: 'Optional token used only to push PR branches (for push_to_fork mode)'
@@ -146,6 +169,8 @@ jobs:
             pr_number=meta.pr_number
             review_comment_id=event.comment.id
             file_path=event.comment.path
+            commenter_login=event.comment.user.login
+            pr_author_login=event.pull_request.user.login
             base_ref=outputs.base_ref
             base_repo=event.pull_request.base.repo.full_name
             head_repo=event.pull_request.head.repo.full_name
@@ -154,6 +179,245 @@ jobs:
             head_label=event.pull_request.head.label
             committer=outputs.committer
             author=outputs.author
+
+      - name: Authorize commenter
+        if: steps.bridge.outputs.file_path != ''
+        id: authorize_commenter
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        env:
+          ALLOW_PR_AUTHOR: ${{ inputs.allow_pr_author }}
+          MIN_REPO_PERMISSION: ${{ inputs.min_repo_permission }}
+          RAW_ALLOWED_TEAMS: ${{ inputs.allowed_teams }}
+          RAW_ALLOWED_USERS: ${{ inputs.allowed_users }}
+          COMMENTER_LOGIN: ${{ steps.bridge.outputs.commenter_login }}
+          PR_AUTHOR_LOGIN: ${{ steps.bridge.outputs.pr_author_login }}
+          BASE_REPO: ${{ steps.bridge.outputs.base_repo }}
+          AUTHZ_TOKEN_SOURCE: ${{ secrets.authz_token != '' && 'secrets.authz_token' || secrets.token != '' && 'secrets.token' || steps.token_mode.outputs.token_source }}
+        with:
+          github-token: ${{ secrets.authz_token || secrets.token || steps.token_from_app.outputs.token || github.token }}
+          script: |
+            const allowPrAuthor = (process.env.ALLOW_PR_AUTHOR || 'true') === 'true';
+            const minRepoPermission = (process.env.MIN_REPO_PERMISSION || 'anyone').trim().toLowerCase();
+            const commenterLogin = (process.env.COMMENTER_LOGIN || '').trim();
+            const prAuthorLogin = (process.env.PR_AUTHOR_LOGIN || '').trim();
+            const baseRepo = (process.env.BASE_REPO || '').trim();
+            const rawAllowedTeams = process.env.RAW_ALLOWED_TEAMS || '';
+            const rawAllowedUsers = process.env.RAW_ALLOWED_USERS || '';
+            const authzTokenSource = process.env.AUTHZ_TOKEN_SOURCE || 'unknown';
+
+            const parseList = (raw) =>
+              raw
+                .split(/[\n,]/)
+                .map((item) => item.trim().toLowerCase())
+                .filter(Boolean);
+
+            const setAuthzOutputs = (decision, reason, details) => {
+              core.setOutput('authz_decision', decision);
+              core.setOutput('authz_reason', reason);
+              core.setOutput('authz_details', details);
+              core.setOutput('authz_token_source', authzTokenSource);
+            };
+
+            const deny = (reason, details) => {
+              core.warning(`Authorization denied: ${reason}`);
+              core.info(details);
+              setAuthzOutputs('deny', reason, details);
+              core.setFailed(`Authorization denied: ${reason}`);
+            };
+
+            const failError = (reason, details) => {
+              core.error(`Authorization check error: ${reason}`);
+              core.info(details);
+              setAuthzOutputs('error', reason, details);
+              core.setFailed(`Authorization check error: ${reason}`);
+            };
+
+            const allowedTeams = parseList(rawAllowedTeams);
+            const allowedUsers = parseList(rawAllowedUsers);
+            const validMinPermissions = new Set(['anyone', 'triage', 'write']);
+            if (!validMinPermissions.has(minRepoPermission)) {
+              failError(
+                `Invalid min_repo_permission '${minRepoPermission}'. Expected one of: anyone, triage, write.`,
+                [
+                  `commenter: ${commenterLogin || '(missing)'}`,
+                  `base repo: ${baseRepo || '(missing)'}`,
+                ].join('\n')
+              );
+              return;
+            }
+
+            if (!commenterLogin || !prAuthorLogin || !baseRepo) {
+              failError(
+                'Missing bridge data required for authorization.',
+                [
+                  `commenter_login: ${commenterLogin || '(missing)'}`,
+                  `pr_author_login: ${prAuthorLogin || '(missing)'}`,
+                  `base_repo: ${baseRepo || '(missing)'}`,
+                  'Ensure splice.yaml emits comment.user.login, pull_request.user.login, and pull_request.base.repo.full_name.',
+                ].join('\n')
+              );
+              return;
+            }
+
+            const repoParts = baseRepo.split('/');
+            const owner = repoParts[0];
+            const repo = repoParts[1];
+            if (!owner || !repo || repoParts.length !== 2) {
+              failError(`Invalid base repo format '${baseRepo}'. Expected owner/repo.`, `base_repo: ${baseRepo}`);
+              return;
+            }
+
+            const permissionRank = {
+              none: 0,
+              read: 1,
+              triage: 2,
+              write: 3,
+              maintain: 4,
+              admin: 5,
+            };
+            const minThreshold = minRepoPermission === 'triage' ? permissionRank.triage : minRepoPermission === 'write' ? permissionRank.write : null;
+            let repoPermission = 'not-checked';
+            const matchedRules = [];
+            const buildDetails = () =>
+              [
+                `commenter: ${commenterLogin}`,
+                `pr author: ${prAuthorLogin}`,
+                `base repo: ${baseRepo}`,
+                `allow_pr_author: ${allowPrAuthor}`,
+                `min_repo_permission: ${minRepoPermission}`,
+                `observed_repo_permission: ${repoPermission}`,
+                `allowed_users: ${allowedUsers.length > 0 ? allowedUsers.join(', ') : '(none)'}`,
+                `allowed_teams: ${allowedTeams.length > 0 ? allowedTeams.join(', ') : '(none)'}`,
+                `matched_rules: ${matchedRules.length > 0 ? matchedRules.join(', ') : '(none)'}`,
+                `authz token source: ${authzTokenSource}`,
+              ].join('\n');
+            const authorize = () => {
+              const reason = `Authorized ${commenterLogin} via ${matchedRules.join(', ')}.`;
+              const details = buildDetails();
+              core.info(reason);
+              core.info(details);
+              setAuthzOutputs('allow', reason, details);
+            };
+
+            if (allowPrAuthor && commenterLogin.toLowerCase() === prAuthorLogin.toLowerCase()) {
+              matchedRules.push('pr-author');
+            }
+
+            if (allowedUsers.includes(commenterLogin.toLowerCase())) {
+              matchedRules.push('allowed-users');
+            }
+
+            if (matchedRules.length > 0) {
+              authorize();
+              return;
+            }
+
+            if (minRepoPermission === 'anyone') {
+              matchedRules.push('repo-permission>=anyone');
+              authorize();
+              return;
+            }
+
+            if (minThreshold !== null) {
+              try {
+                const { data } = await github.rest.repos.getCollaboratorPermissionLevel({
+                  owner,
+                  repo,
+                  username: commenterLogin,
+                });
+                repoPermission = (data.permission || 'none').toLowerCase();
+              } catch (error) {
+                if (error.status === 404) {
+                  repoPermission = 'none';
+                } else {
+                  failError(
+                    `Unable to resolve collaborator permission for ${commenterLogin} on ${baseRepo}: ${error.message}`,
+                    [
+                      `authz token source: ${authzTokenSource}`,
+                      'Provide authz_token with sufficient read access if needed.',
+                    ].join('\n')
+                  );
+                  return;
+                }
+              }
+
+              const observedRank = permissionRank[repoPermission] ?? permissionRank.none;
+              if (observedRank >= minThreshold) {
+                matchedRules.push(`repo-permission>=${minRepoPermission}`);
+                authorize();
+                return;
+              }
+            }
+
+            if (allowedTeams.length > 0) {
+              let ownerType = 'Unknown';
+              try {
+                const { data: repoData } = await github.rest.repos.get({ owner, repo });
+                ownerType = repoData.owner?.type || 'Unknown';
+              } catch (error) {
+                failError(
+                  `Unable to resolve repository owner type for ${baseRepo}: ${error.message}`,
+                  [
+                    `authz token source: ${authzTokenSource}`,
+                    'Provide authz_token with repository read access if needed.',
+                  ].join('\n')
+                );
+                return;
+              }
+
+              if (ownerType !== 'Organization') {
+                deny(
+                  `allowed_teams was configured, but ${baseRepo} is not organization-owned.`,
+                  [
+                    `commenter: ${commenterLogin}`,
+                    `base repo owner type: ${ownerType}`,
+                    `configured teams: ${allowedTeams.join(', ')}`,
+                  ].join('\n')
+                );
+                return;
+              }
+
+              for (const teamSpec of allowedTeams) {
+                const parts = teamSpec.split('/');
+                const teamOrg = parts.length === 2 ? parts[0] : owner;
+                const teamSlug = parts.length === 2 ? parts[1] : teamSpec;
+                if (!teamOrg || !teamSlug) {
+                  failError(`Invalid team spec '${teamSpec}'. Use team-slug or org/team-slug.`, `configured teams: ${allowedTeams.join(', ')}`);
+                  return;
+                }
+
+                try {
+                  const { data } = await github.rest.teams.getMembershipForUserInOrg({
+                    org: teamOrg,
+                    team_slug: teamSlug,
+                    username: commenterLogin,
+                  });
+                  if (data.state === 'active') {
+                    matchedRules.push(`team:${teamOrg}/${teamSlug}`);
+                    authorize();
+                    return;
+                  }
+                } catch (error) {
+                  if (error.status === 404) {
+                    core.info(`User ${commenterLogin} is not an active member of ${teamOrg}/${teamSlug}.`);
+                    continue;
+                  }
+                  failError(
+                    `Unable to verify team membership for ${teamOrg}/${teamSlug}: ${error.message}`,
+                    [
+                      `authz token source: ${authzTokenSource}`,
+                      'Provide authz_token with organization team/membership read permissions if needed.',
+                    ].join('\n')
+                  );
+                  return;
+                }
+              }
+            }
+
+            deny(
+              `Commenter ${commenterLogin} is not authorized to trigger splice-bot.`,
+              buildDetails()
+            );
 
       - name: Check out BASE (PR base repo @ base_ref)
         if: steps.bridge.outputs.file_path != ''
@@ -264,7 +528,7 @@ jobs:
             }
 
       - name: Validate create-pull-request inputs
-        if: steps.bridge.outputs.file_path != '' && steps.branch_and_copy.outputs.NO_CHANGES != 'true' && steps.branch_and_copy.outputs.APPLY_FAILED != 'true'
+        if: steps.bridge.outputs.file_path != '' && steps.authorize_commenter.outcome == 'success' && steps.branch_and_copy.outputs.NO_CHANGES != 'true' && steps.branch_and_copy.outputs.APPLY_FAILED != 'true'
         id: validate_cpr_inputs
         env:
           PUSH_TO_FORK: ${{ inputs.push_to_fork }}
@@ -321,7 +585,7 @@ jobs:
           fi
 
       - name: Create Pull Request
-        if: steps.bridge.outputs.file_path != '' && steps.branch_and_copy.outputs.NO_CHANGES != 'true' && steps.branch_and_copy.outputs.APPLY_FAILED != 'true' && steps.validate_cpr_inputs.outcome == 'success'
+        if: steps.bridge.outputs.file_path != '' && steps.authorize_commenter.outcome == 'success' && steps.branch_and_copy.outputs.NO_CHANGES != 'true' && steps.branch_and_copy.outputs.APPLY_FAILED != 'true' && steps.validate_cpr_inputs.outcome == 'success'
         id: cpr
         uses: peter-evans/create-pull-request@98357b18bf14b5342f975ff684046ec3b2a07725 #v8.0.0
         with:
@@ -345,6 +609,12 @@ jobs:
       - name: Comment back on the original PR
         if: always() && steps.bridge.outputs.pr_number != ''
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        env:
+          AUTHZ_OUTCOME: ${{ steps.authorize_commenter.outcome }}
+          AUTHZ_DECISION: ${{ steps.authorize_commenter.outputs.authz_decision }}
+          AUTHZ_REASON: ${{ steps.authorize_commenter.outputs.authz_reason }}
+          AUTHZ_DETAILS: ${{ steps.authorize_commenter.outputs.authz_details }}
+          AUTHZ_TOKEN_SOURCE: ${{ steps.authorize_commenter.outputs.authz_token_source }}
         with:
           script: |
             const originalPrNumber = Number('${{ steps.bridge.outputs.pr_number }}');
@@ -362,6 +632,11 @@ jobs:
             const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}/attempts/${process.env.GITHUB_RUN_ATTEMPT}`;
             const tokenSource = '${{ steps.token_mode.outputs.token_source }}';
             const branchTokenSource = '${{ steps.token_mode.outputs.branch_token_source }}';
+            const authzOutcome = process.env.AUTHZ_OUTCOME || '';
+            const authzDecision = process.env.AUTHZ_DECISION || '';
+            const authzReason = process.env.AUTHZ_REASON || '';
+            const authzDetails = process.env.AUTHZ_DETAILS || '';
+            const authzTokenSource = process.env.AUTHZ_TOKEN_SOURCE || 'unknown';
             const forkOwner = '${{ steps.fork_owner.outputs.fork_owner }}';
             const forkOwnerType = '${{ steps.fork_owner.outputs.fork_owner_type }}';
 
@@ -379,6 +654,7 @@ jobs:
               ['Consume bridge artifact', '${{ steps.bridge.outcome }}'],
               ['Check out BASE', '${{ steps.checkout_base.outcome }}'],
               ['Check out HEAD', '${{ steps.checkout_head.outcome }}'],
+              ['Authorize commenter', '${{ steps.authorize_commenter.outcome }}'],
               ['Stage file changes', '${{ steps.branch_and_copy.outcome }}'],
               ['Detect push_to_fork owner type', '${{ steps.fork_owner.outcome }}'],
               ['Validate create-pull-request inputs', '${{ steps.validate_cpr_inputs.outcome }}'],
@@ -402,6 +678,24 @@ jobs:
               adviceLines = [
                 'Ensure the source workflow uploaded the `workflow-data` artifact and this run was triggered from a `pull_request_review_comment` event.',
                 'Check the run logs link below and re-run after posting a fresh review comment on a file line.',
+              ];
+            } else if (authzOutcome === 'failure' || authzDecision === 'deny') {
+              title = 'Not authorized to trigger splice-bot';
+              bodyIntro = authzReason
+                ? authzReason
+                : 'This review comment is not authorized by the configured splice-bot trigger policy.';
+              adviceLines = [
+                'If this should be allowed, update workflow inputs (`allow_pr_author`, `min_repo_permission`, `allowed_users`, `allowed_teams`) or adjust repository/team permissions.',
+                'You can also re-run using an authorized commenter account.',
+              ];
+            } else if (authzDecision === 'error') {
+              title = 'Authorization check failed';
+              bodyIntro = authzReason
+                ? authzReason
+                : 'I could not complete the authorization checks for this review comment.';
+              adviceLines = [
+                'Verify the auth-check token has required access for collaborator/team lookups (`authz_token` preferred).',
+                'Check run logs and retry once token permissions are fixed.',
               ];
             } else if (applyFailed) {
               title = 'Could not apply patch cleanly';
@@ -461,9 +755,19 @@ jobs:
             const tokenDiagnostics = [
               `- token source: \`${tokenSource || 'unknown'}\``,
               `- branch token source: \`${branchTokenSource || 'unknown'}\``,
+              `- authz token source: \`${authzTokenSource || 'unknown'}\``,
             ];
             if (forkOwner || forkOwnerType) {
               tokenDiagnostics.push(`- push_to_fork owner: \`${forkOwner || 'unknown'}\` (type: \`${forkOwnerType || 'unknown'}\`)`);
+            }
+            if (authzDetails) {
+              const detailLines = authzDetails
+                .split('\n')
+                .filter(Boolean)
+                .map((line) => `- ${line}`);
+              if (detailLines.length > 0) {
+                tokenDiagnostics.push(...detailLines);
+              }
             }
             const tokenDiagnosticsBlock = tokenDiagnostics.join('\n');
             const stepOutcomesDetails = `<details>\n<summary>Step outcomes</summary>\n\n${outcomeLines}\n</details>`;

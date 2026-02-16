@@ -129,7 +129,9 @@ jobs:
           event_fields: |
             comment.id
             comment.path
+            comment.user.login
             pull_request.base.repo.full_name
+            pull_request.user.login
             pull_request.head.repo.full_name
             pull_request.head.sha
             pull_request.head.ref
