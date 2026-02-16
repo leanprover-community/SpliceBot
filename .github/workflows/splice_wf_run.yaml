@@ -47,6 +47,11 @@ on:
         required: false
         type: string
         default: ''
+      authz_token_app_owner:
+        description: 'Optional owner used when minting authz_token from a GitHub App installation'
+        required: false
+        type: string
+        default: ''
     secrets:
       token:
         description: 'Token used for artifact download, checkout, and PR API calls (change from GITHUB_TOKEN to allow triggering CI)'
@@ -69,6 +74,12 @@ on:
       branch_token_app_private_key:
         description: 'Optional GitHub App private key used to mint branch_token when branch_token is not provided'
         required: false
+      authz_token_app_id:
+        description: 'Optional GitHub App ID used to mint authz_token when authz_token is not provided'
+        required: false
+      authz_token_app_private_key:
+        description: 'Optional GitHub App private key used to mint authz_token when authz_token is not provided'
+        required: false
 
 permissions:
   actions: read
@@ -84,9 +95,12 @@ jobs:
         id: token_mode
         env:
           STATIC_TOKEN: ${{ secrets.token }}
+          STATIC_AUTHZ_TOKEN: ${{ secrets.authz_token }}
           STATIC_BRANCH_TOKEN: ${{ secrets.branch_token }}
           TOKEN_APP_ID: ${{ secrets.token_app_id }}
           TOKEN_APP_PRIVATE_KEY: ${{ secrets.token_app_private_key }}
+          AUTHZ_TOKEN_APP_ID: ${{ secrets.authz_token_app_id }}
+          AUTHZ_TOKEN_APP_PRIVATE_KEY: ${{ secrets.authz_token_app_private_key }}
           BRANCH_TOKEN_APP_ID: ${{ secrets.branch_token_app_id }}
           BRANCH_TOKEN_APP_PRIVATE_KEY: ${{ secrets.branch_token_app_private_key }}
           PUSH_TO_FORK: ${{ inputs.push_to_fork }}
@@ -94,12 +108,20 @@ jobs:
           set -euo pipefail
 
           mint_token=false
+          mint_authz_token=false
           mint_branch_token=false
           token_source=github.token
+          authz_token_source=github.token
           branch_token_source=not-applicable
 
           if [ -z "${STATIC_TOKEN}" ] && [ -n "${TOKEN_APP_ID}" ] && [ -n "${TOKEN_APP_PRIVATE_KEY}" ]; then
             mint_token=true
+          fi
+
+          if [ -z "${STATIC_AUTHZ_TOKEN}" ] && \
+             { [ -n "${AUTHZ_TOKEN_APP_ID}" ] || [ -n "${TOKEN_APP_ID}" ]; } && \
+             { [ -n "${AUTHZ_TOKEN_APP_PRIVATE_KEY}" ] || [ -n "${TOKEN_APP_PRIVATE_KEY}" ]; }; then
+            mint_authz_token=true
           fi
 
           if [ -n "${PUSH_TO_FORK}" ] && [ -z "${STATIC_BRANCH_TOKEN}" ] && \
@@ -112,6 +134,16 @@ jobs:
             token_source=secrets.token
           elif [ "${mint_token}" = "true" ]; then
             token_source=app-token
+          fi
+
+          if [ -n "${STATIC_AUTHZ_TOKEN}" ]; then
+            authz_token_source=secrets.authz_token
+          elif [ "${mint_authz_token}" = "true" ]; then
+            authz_token_source=app-authz-token
+          elif [ -n "${STATIC_TOKEN}" ]; then
+            authz_token_source=secrets.token
+          elif [ "${mint_token}" = "true" ]; then
+            authz_token_source=app-token
           fi
 
           if [ -n "${PUSH_TO_FORK}" ]; then
@@ -129,8 +161,10 @@ jobs:
           fi
 
           echo "mint_token=${mint_token}" >> "$GITHUB_OUTPUT"
+          echo "mint_authz_token=${mint_authz_token}" >> "$GITHUB_OUTPUT"
           echo "mint_branch_token=${mint_branch_token}" >> "$GITHUB_OUTPUT"
           echo "token_source=${token_source}" >> "$GITHUB_OUTPUT"
+          echo "authz_token_source=${authz_token_source}" >> "$GITHUB_OUTPUT"
           echo "branch_token_source=${branch_token_source}" >> "$GITHUB_OUTPUT"
 
       - name: Generate token from GitHub App (optional)
@@ -151,9 +185,19 @@ jobs:
           private-key: ${{ secrets.branch_token_app_private_key || secrets.token_app_private_key }}
           owner: ${{ inputs.branch_token_app_owner || inputs.token_app_owner }}
 
+      - name: Generate authz_token from GitHub App (optional)
+        if: steps.token_mode.outputs.mint_authz_token == 'true'
+        id: authz_token_from_app
+        uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2.2.1
+        with:
+          app-id: ${{ secrets.authz_token_app_id || secrets.token_app_id }}
+          private-key: ${{ secrets.authz_token_app_private_key || secrets.token_app_private_key }}
+          owner: ${{ inputs.authz_token_app_owner || inputs.token_app_owner }}
+
       - name: Log token source selection
         run: |
           echo "token source: ${{ steps.token_mode.outputs.token_source }}"
+          echo "authz-token source: ${{ steps.token_mode.outputs.authz_token_source }}"
           echo "branch-token source: ${{ steps.token_mode.outputs.branch_token_source }}"
 
       - name: Consume bridge artifact
@@ -192,9 +236,9 @@ jobs:
           COMMENTER_LOGIN: ${{ steps.bridge.outputs.commenter_login }}
           PR_AUTHOR_LOGIN: ${{ steps.bridge.outputs.pr_author_login }}
           BASE_REPO: ${{ steps.bridge.outputs.base_repo }}
-          AUTHZ_TOKEN_SOURCE: ${{ secrets.authz_token != '' && 'secrets.authz_token' || secrets.token != '' && 'secrets.token' || steps.token_mode.outputs.token_source }}
+          AUTHZ_TOKEN_SOURCE: ${{ steps.token_mode.outputs.authz_token_source }}
         with:
-          github-token: ${{ secrets.authz_token || secrets.token || steps.token_from_app.outputs.token || github.token }}
+          github-token: ${{ secrets.authz_token || steps.authz_token_from_app.outputs.token || secrets.token || steps.token_from_app.outputs.token || github.token }}
           script: |
             const allowPrAuthor = (process.env.ALLOW_PR_AUTHOR || 'true') === 'true';
             const minRepoPermission = (process.env.MIN_REPO_PERMISSION || 'anyone').trim().toLowerCase();

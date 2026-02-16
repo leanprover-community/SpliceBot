@@ -126,6 +126,8 @@ jobs:
       min_repo_permission: write
       # Installation owner used when minting token from app credentials below.
       token_app_owner: your-base-or-fork-owner
+      # Optional override when authz_token should be minted from a different owner.
+      # authz_token_app_owner: your-org-owner
       # Optional override when branch_token should be minted from a different owner.
       # branch_token_app_owner: your-fork-owner
       push_to_fork: your-fork-owner/your-fork-repo
@@ -134,6 +136,11 @@ jobs:
       # token: ${{ secrets.SPLICE_BOT_TOKEN }}
       token_app_id: ${{ secrets.SPLICEBOT_TESTING_APP_ID }}
       token_app_private_key: ${{ secrets.SPLICEBOT_TESTING_PRIVATE_KEY }}
+      # Optional static authz token; if omitted, authz_token_app_* (or token_app_*) is used.
+      # authz_token: ${{ secrets.SPLICE_BOT_AUTHZ_TOKEN }}
+      # Optional override app credentials for authz_token minting.
+      # authz_token_app_id: ${{ secrets.SPLICEBOT_TESTING_AUTHZ_APP_ID }}
+      # authz_token_app_private_key: ${{ secrets.SPLICEBOT_TESTING_AUTHZ_PRIVATE_KEY }}
       # Optional static branch token; if omitted, branch_token_app_* (or token_app_*) is used.
       # branch_token: ${{ secrets.SPLICE_BOT_FORK_TOKEN }}
       # Optional override app credentials for branch_token minting.
@@ -146,6 +153,14 @@ GitHub App token permissions for the example above:
 * `token` (artifact download, checkout, PR API):
   * Repository permissions: `Contents: Read`, `Pull requests: Read & write`, `Actions: Read`.
   * Install on: an app installation that can access the base repository (where this workflow runs and where the split PR is opened).
+* `authz_token` (authorization checks):
+  * For collaborator-permission checks (`min_repo_permission: triage|write`):
+    * Fine-grained PAT / GitHub App token: `Metadata` repository permission (`read`) on the base repo.
+    * Classic PAT: `repo` (private repos) and `read:org` (org repos).
+  * For team-membership checks (`allowed_teams`):
+    * Fine-grained PAT / GitHub App token: `Members` organization permission (`read`) on the org.
+    * Classic PAT: `read:org`.
+  * Install on: an app installation that can read the base repository metadata, plus org members metadata if `allowed_teams` is used.
 * `branch_token` (fork branch push):
   * Recommended repository permissions: `Contents: Read & write`, `Workflows: Read & write` on the fork repo (needed because pushes may include `.github/workflows/*` changes, including upstream commits introduced when the fork is behind).
   * `Pull requests` permission is not required if this token is only used for branch pushes.
@@ -178,6 +193,7 @@ GitHub App token permissions for the example above:
 | `push_to_fork`          | string | No       | `''`    | Optional fork destination (`owner/repo`) for PR branches. When empty, branches are pushed to base repo.    |
 | `maintainer_can_modify` | string | No       | `''`    | Optional fork-mode override (`"true"` or `"false"`). If omitted in fork mode, defaults to `"false"`.       |
 | `token_app_owner`       | string | No       | `''`    | Optional owner used when minting `token` from GitHub App credentials.                                      |
+| `authz_token_app_owner` | string | No       | `''`    | Optional owner used when minting `authz_token` from GitHub App credentials.                                |
 | `branch_token_app_owner`| string | No       | `''`    | Optional owner used when minting `branch_token` from GitHub App credentials.                               |
 
 Authorization policy notes:
@@ -202,10 +218,12 @@ Optional secrets for `splice_wf_run.yaml`:
 | Name           | Required | Description                                                                                                                                            |
 | -------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `token`        | No       | Token used for artifact download, checkout, and PR API calls. Defaults to `github.token`. Use an explicit secret (e.g. `SPLICE_BOT_TOKEN`) if needed. |
-| `authz_token`  | No       | Token used only for authorization checks (collaborator permission and team membership). Falls back to `token`, then `github.token`.                 |
+| `authz_token`  | No       | Token used only for authorization checks (collaborator permission and team membership). Falls back to app-minted `authz_token`, then `token`, then `github.token`. |
 | `branch_token` | No       | Token used only for branch push in fork mode. Defaults to `token` (or `github.token` if `token` is also omitted).                                   |
 | `token_app_id` | No       | GitHub App ID used to mint `token` when `token` is not provided.                                                                                      |
 | `token_app_private_key` | No | GitHub App private key used to mint `token` when `token` is not provided.                                                                          |
+| `authz_token_app_id` | No | GitHub App ID used to mint `authz_token` when `authz_token` is not provided. Defaults to `token_app_id` when omitted.                              |
+| `authz_token_app_private_key` | No | GitHub App private key used to mint `authz_token` when `authz_token` is not provided. Defaults to `token_app_private_key` when omitted. |
 | `branch_token_app_id` | No | GitHub App ID used to mint `branch_token` when `branch_token` is not provided. Defaults to `token_app_id` when omitted.                            |
 | `branch_token_app_private_key` | No | GitHub App private key used to mint `branch_token` when `branch_token` is not provided. Defaults to `token_app_private_key` when omitted. |
 
@@ -214,6 +232,10 @@ Token caveats:
 * If `token` is `github.token`, downstream workflows may not trigger on the bot-created push/PR.
 * Authorization checks fail closed: if policy checks cannot be completed, splice-bot does not proceed.
 * `authz_token` is recommended when using `allowed_teams` or strict permission checks; it can be lower-privilege than write/push tokens.
+* `authz_token` minimum required access by policy:
+  * `allow_pr_author` and/or `allowed_users` only: no additional API scopes are required.
+  * `min_repo_permission: triage|write`: repo metadata read (`Metadata: read` for fine-grained/App; classic PAT typically `repo` + `read:org` on org repos).
+  * `allowed_teams`: org members read (`Members: read` for fine-grained/App; classic PAT `read:org`).
 * If using `push_to_fork`, the branch push token (resolved from `branch_token` then `token`) must have write access to that fork.
 * If the selected file is under `.github/workflows/`, the token that pushes the branch must have `Workflows: Read & write` (GitHub rejects workflow-file updates from apps without this permission).
 * Even when the selected file is not a workflow file, this can still be required if the fork branch is behind upstream and the push would introduce upstream commits that modify `.github/workflows/`.
