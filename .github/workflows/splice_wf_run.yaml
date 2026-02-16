@@ -188,10 +188,17 @@ jobs:
           BASE_REF="${{ steps.bridge.outputs.base_ref }}"
           HEAD_SHA="${{ steps.bridge.outputs.head_sha }}"
 
-          # Only keep alphanumeric characters from file name
-          SAFE_FILE="$(echo "$FILE_PATH" | sed 's/[^0-9a-zA-Z/._]*//g' | tr -d '\n')"
-          BRANCH="splice-bot/file-${SAFE_FILE}-from-PR${PR_NUMBER}"
-          printf $'SAFE_FILE: %s\nBRANCH: %s\n' "${SAFE_FILE}" "${BRANCH}"
+          # Build a bounded, ref-safe slug from the file path.
+          FILE_SLUG="$(printf '%s' "${FILE_PATH}" \
+            | tr '/[:space:]' '-' \
+            | sed -E 's/[^A-Za-z0-9._-]+/-/g; s/\.\.+/./g; s/^[._-]+//; s/[._-]+$//; s/-+/-/g')"
+          if [ -z "${FILE_SLUG}" ]; then
+            FILE_SLUG="file"
+          fi
+          FILE_SLUG="${FILE_SLUG:0:80}"
+          FILE_HASH="$(printf '%s' "${FILE_PATH}" | sha256sum | cut -c1-10)"
+          BRANCH="splice-bot/pr-${PR_NUMBER}-${FILE_SLUG}-${FILE_HASH}"
+          printf $'FILE_SLUG: %s\nFILE_HASH: %s\nBRANCH: %s\n' "${FILE_SLUG}" "${FILE_HASH}" "${BRANCH}"
 
           echo "BRANCH=$BRANCH" | tee -a "$GITHUB_OUTPUT"
 
@@ -233,8 +240,50 @@ jobs:
             exit 0
           fi
 
-      - name: Create Pull Request
+      - name: Validate create-pull-request inputs
         if: steps.bridge.outputs.file_path != '' && steps.branch_and_copy.outputs.NO_CHANGES != 'true' && steps.branch_and_copy.outputs.APPLY_FAILED != 'true'
+        id: validate_cpr_inputs
+        env:
+          PUSH_TO_FORK: ${{ inputs.push_to_fork }}
+          MAINTAINER_CAN_MODIFY: ${{ inputs.maintainer_can_modify }}
+          BRANCH_NAME: ${{ steps.branch_and_copy.outputs.BRANCH }}
+          COMMITTER: ${{ steps.bridge.outputs.committer }}
+          AUTHOR: ${{ steps.bridge.outputs.author }}
+        run: |
+          set -euo pipefail
+
+          if [ -n "${PUSH_TO_FORK}" ] && ! [[ "${PUSH_TO_FORK}" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+            echo "::error::Invalid push_to_fork '${PUSH_TO_FORK}'. Expected owner/repo."
+            exit 1
+          fi
+
+          if [ -n "${MAINTAINER_CAN_MODIFY}" ] && [ "${MAINTAINER_CAN_MODIFY}" != "true" ] && [ "${MAINTAINER_CAN_MODIFY}" != "false" ]; then
+            echo "::error::Invalid maintainer_can_modify '${MAINTAINER_CAN_MODIFY}'. Expected 'true', 'false', or empty."
+            exit 1
+          fi
+
+          if ! git check-ref-format --branch "${BRANCH_NAME}" >/dev/null 2>&1; then
+            echo "::error::Generated branch name is invalid: '${BRANCH_NAME}'."
+            exit 1
+          fi
+
+          if [ "${#BRANCH_NAME}" -gt 220 ]; then
+            echo "::error::Generated branch name is too long (${#BRANCH_NAME} chars). This indicates a branch generation bug."
+            exit 1
+          fi
+
+          if [ -n "${COMMITTER}" ] && ! [[ "${COMMITTER}" =~ ^.+ <[^<>[:space:]]+@[^<>[:space:]]+>$ ]]; then
+            echo "::error::Invalid committer format '${COMMITTER}'. Expected 'Name <email@address>'."
+            exit 1
+          fi
+
+          if [ -n "${AUTHOR}" ] && ! [[ "${AUTHOR}" =~ ^.+ <[^<>[:space:]]+@[^<>[:space:]]+>$ ]]; then
+            echo "::error::Invalid author format '${AUTHOR}'. Expected 'Name <email@address>'."
+            exit 1
+          fi
+
+      - name: Create Pull Request
+        if: steps.bridge.outputs.file_path != '' && steps.branch_and_copy.outputs.NO_CHANGES != 'true' && steps.branch_and_copy.outputs.APPLY_FAILED != 'true' && steps.validate_cpr_inputs.outcome == 'success'
         id: cpr
         uses: peter-evans/create-pull-request@98357b18bf14b5342f975ff684046ec3b2a07725 #v8.0.0
         with:
@@ -289,6 +338,7 @@ jobs:
               ['Check out BASE', '${{ steps.checkout_base.outcome }}'],
               ['Check out HEAD', '${{ steps.checkout_head.outcome }}'],
               ['Stage file changes', '${{ steps.branch_and_copy.outcome }}'],
+              ['Validate create-pull-request inputs', '${{ steps.validate_cpr_inputs.outcome }}'],
               ['Create Pull Request', '${{ steps.cpr.outcome }}'],
             ];
             const failedStepNames = outcomes
@@ -344,6 +394,9 @@ jobs:
               }
               if (failedStepNames.includes('Stage file changes')) {
                 adviceLines.push('Inspect the "Stage file changes" logs for git fetch/apply errors and retry after rebasing if needed.');
+              }
+              if (failedStepNames.includes('Validate create-pull-request inputs')) {
+                adviceLines.push('Fix invalid `create-pull-request` inputs reported in the validation step logs (for example `push_to_fork`, `maintainer_can_modify`, author/committer format, or generated branch name).');
               }
               if (failedStepNames.includes('Create Pull Request')) {
                 adviceLines.push('Check the "Create Pull Request" logs for input validation errors (for example invalid `maintainer-can-modify` values) and other action-level failures.');

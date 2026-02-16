@@ -163,8 +163,9 @@ GitHub App token permissions for the example above:
 
 Branch naming in `splice_wf_run.yaml`:
 
-* Base branch template: `splice-bot/file-<sanitized-file-path>-from-PR<pr-number>`.
-* Sanitization keeps only `[0-9a-zA-Z/._]` from the file path.
+* Base branch template: `splice-bot/pr-<pr-number>-<file-slug>-<hash>`.
+* `file-slug` is derived from the file path, replacing separators/whitespace with `-`, keeping only `[A-Za-z0-9._-]`, and truncating to 80 characters.
+* `<hash>` is the first 10 hex chars of the file path SHA-256 to keep names stable and avoid collisions after truncation.
 * The final pushed branch includes a random suffix because `create-pull-request` uses `branch-suffix: random`.
 
 Optional secrets for `splice_wf_run.yaml`:
