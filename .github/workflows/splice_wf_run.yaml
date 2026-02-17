@@ -580,7 +580,9 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ -n "${PUSH_TO_FORK}" ] && ! [[ "${PUSH_TO_FORK}" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+          owner_repo_re='^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$'
+
+          if [ -n "${PUSH_TO_FORK}" ] && ! [[ "${PUSH_TO_FORK}" =~ ${owner_repo_re} ]]; then
             echo "::error::Invalid push_to_fork '${PUSH_TO_FORK}'. Expected owner/repo."
             exit 1
           fi
@@ -613,12 +615,14 @@ jobs:
             exit 1
           fi
 
-          if [ -n "${COMMITTER}" ] && ! [[ "${COMMITTER}" =~ ^.+ <[^<>[:space:]]+@[^<>[:space:]]+>$ ]]; then
+          name_email_re='^.+ <[^<>[:space:]]+@[^<>[:space:]]+>$'
+
+          if [ -n "${COMMITTER}" ] && ! [[ "${COMMITTER}" =~ ${name_email_re} ]]; then
             echo "::error::Invalid committer format '${COMMITTER}'. Expected 'Name <email@address>'."
             exit 1
           fi
 
-          if [ -n "${AUTHOR}" ] && ! [[ "${AUTHOR}" =~ ^.+ <[^<>[:space:]]+@[^<>[:space:]]+>$ ]]; then
+          if [ -n "${AUTHOR}" ] && ! [[ "${AUTHOR}" =~ ${name_email_re} ]]; then
             echo "::error::Invalid author format '${AUTHOR}'. Expected 'Name <email@address>'."
             exit 1
           fi
