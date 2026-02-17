@@ -62,6 +62,16 @@ jobs:
       min_repo_permission: write
 ```
 
+If you always provide `token`/`authz_token`/`branch_token` (or app credentials that mint them), you can set `permissions: {}` on this caller.  
+If the reusable workflow may fall back to `github.token`, keep:
+
+```yaml
+permissions:
+  actions: read
+  contents: write
+  pull-requests: write
+```
+
 `workflow_run.workflows` must match the **exact name** of the trigger workflow.
 
 To trigger SpliceBot, add a PR review comment on a changed file with a line starting with `splice-bot`:
@@ -77,6 +87,11 @@ If the workflow uses only `github.token`, CI generally will not trigger from bot
 ***
 
 # Common Config Recipes
+
+For `splice_wf_run.yaml` recipes below:
+
+- Set caller `permissions: {}` only if explicit tokens are always provided (or app-minted) for all operations.
+- Otherwise keep caller permissions at least `actions: read`, `contents: write`, and `pull-requests: write` to allow `github.token` fallback.
 
 ## PAT-based token setup
 
