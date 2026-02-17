@@ -644,7 +644,11 @@ jobs:
           maintainer-can-modify: ${{ inputs.maintainer_can_modify == 'true' }}
           commit-message: "Automated addition of changes in ${{ steps.bridge.outputs.file_path }}"
           title: "chore(${{ steps.bridge.outputs.file_path }}): automated extraction"
-          body: "This PR was automatically created from a review comment on PR #${{ steps.bridge.outputs.pr_number }}."
+          body: >-
+            This PR was automatically created from PR #${{ steps.bridge.outputs.pr_number }}
+            by @${{ steps.bridge.outputs.pr_author_login }} via a
+            [review comment](${{ github.server_url }}/${{ steps.bridge.outputs.base_repo }}/pull/${{ steps.bridge.outputs.pr_number }}#discussion_r${{ steps.bridge.outputs.review_comment_id }})
+            by @${{ steps.bridge.outputs.commenter_login }}.
           branch: ${{ steps.branch_and_copy.outputs.BRANCH }}
           branch-suffix: random
           delete-branch: true
