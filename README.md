@@ -2,10 +2,10 @@
 
 SpliceBot creates a **single-file pull request** from an existing PR when a reviewer requests it in a review comment.
 
-It uses a two-workflow pattern:
+It uses a workflow-plus-action pattern:
 
 1. `pull_request_review_comment` workflow (`splice.yaml`) runs read-only and emits a bridge artifact.
-2. `workflow_run` workflow (`splice_wf_run.yaml`) runs with write permissions, consumes the artifact, creates the split PR, and comments back.
+2. `workflow_run` workflow runs with write permissions, mints any needed tokens, then calls the `splice-wf-run` action to consume the artifact, create the split PR, and comment back.
 
 This avoids trying to push from a read-only token context on fork-originated events.
 
@@ -53,17 +53,19 @@ permissions:
   pull-requests: write
 
 jobs:
-  run-reusable:
+  run-splice-bot:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
-    uses: leanprover-community/SpliceBot/.github/workflows/splice_wf_run.yaml@master
-    with:
-      source_workflow: ${{ github.event.workflow_run.name }}
-      allow_pr_author: true
-      min_repo_permission: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: leanprover-community/SpliceBot/.github/actions/splice-wf-run@master
+        with:
+          source_workflow: ${{ github.event.workflow_run.name }}
+          allow_pr_author: 'true'
+          min_repo_permission: write
 ```
 
-If you always provide `token`/`authz_token`/`branch_token` (or app credentials that mint them), you can set `permissions: {}` on this caller.  
-If the reusable workflow may fall back to `github.token`, keep:
+If you always provide `token`/`authz_token`/`branch_token` (or app credentials that mint them), you can set `permissions: {}` on this job.
+If you plan to pass `github.token` as `token`, keep:
 
 ```yaml
 permissions:
@@ -88,65 +90,84 @@ If the workflow uses only `github.token`, CI generally will not trigger from bot
 
 # Common Config Recipes
 
-For `splice_wf_run.yaml` recipes below:
+For `splice-wf-run` action recipes below:
 
-- Set caller `permissions: {}` only if explicit tokens are always provided (or app-minted) for all operations.
-- Otherwise keep caller permissions at least `actions: read`, `contents: write`, and `pull-requests: write` to allow `github.token` fallback.
+- Set caller `permissions: {}` only if explicit tokens are always provided (or minted earlier in the same job) for all operations.
+- Otherwise keep caller permissions at least `actions: read`, `contents: write`, and `pull-requests: write` so `github.token` remains usable if you choose to pass it.
 
 ## PAT-based token setup
 
 ```yaml
 jobs:
-  run-reusable:
-    uses: leanprover-community/SpliceBot/.github/workflows/splice_wf_run.yaml@master
-    with:
-      source_workflow: ${{ github.event.workflow_run.name }}
-      allow_pr_author: true
-      min_repo_permission: write
-      # allowed_users: |
-      #   trusted-maintainer
-      # allowed_teams: |
-      #   my-org/automation-admins
-    secrets:
-      token: ${{ secrets.SPLICE_BOT_TOKEN }}
-      # authz_token: ${{ secrets.SPLICE_BOT_AUTHZ_TOKEN }}
-      # branch_token: ${{ secrets.SPLICE_BOT_FORK_TOKEN }}
+  run-splice-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: leanprover-community/SpliceBot/.github/actions/splice-wf-run@master
+        with:
+          source_workflow: ${{ github.event.workflow_run.name }}
+          allow_pr_author: 'true'
+          min_repo_permission: write
+          # allowed_users: |
+          #   trusted-maintainer
+          # allowed_teams: |
+          #   my-org/automation-admins
+          token: ${{ secrets.SPLICE_BOT_TOKEN }}
+          # authz_token: ${{ secrets.SPLICE_BOT_AUTHZ_TOKEN }}
+          # branch_token: ${{ secrets.SPLICE_BOT_FORK_TOKEN }}
 ```
 
-## GitHub App token minting in reusable workflow
+## GitHub App token minting in caller job
 
 ```yaml
 jobs:
-  run-reusable:
-    uses: leanprover-community/SpliceBot/.github/workflows/splice_wf_run.yaml@master
-    with:
-      source_workflow: ${{ github.event.workflow_run.name }}
-      token_app_owner: your-base-or-fork-owner
-      # authz_token_app_owner: your-org-owner
-      # branch_token_app_owner: your-fork-owner
-      # push_to_fork: your-fork-owner/your-fork-repo
-    secrets:
-      token_app_id: ${{ secrets.SPLICEBOT_TESTING_APP_ID }}
-      token_app_private_key: ${{ secrets.SPLICEBOT_TESTING_PRIVATE_KEY }}
-      # authz_token_app_id: ${{ secrets.SPLICEBOT_TESTING_AUTHZ_APP_ID }}
-      # authz_token_app_private_key: ${{ secrets.SPLICEBOT_TESTING_AUTHZ_PRIVATE_KEY }}
-      # branch_token_app_id: ${{ secrets.SPLICEBOT_TESTING_FORK_APP_ID }}
-      # branch_token_app_private_key: ${{ secrets.SPLICEBOT_TESTING_FORK_PRIVATE_KEY }}
+  run-splice-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - id: token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.SPLICEBOT_TESTING_APP_ID }}
+          private-key: ${{ secrets.SPLICEBOT_TESTING_PRIVATE_KEY }}
+          owner: your-base-or-fork-owner
+
+      - id: authz-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.SPLICEBOT_TESTING_AUTHZ_APP_ID }}
+          private-key: ${{ secrets.SPLICEBOT_TESTING_AUTHZ_PRIVATE_KEY }}
+          owner: your-org-owner
+
+      - id: branch-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.SPLICEBOT_TESTING_FORK_APP_ID }}
+          private-key: ${{ secrets.SPLICEBOT_TESTING_FORK_PRIVATE_KEY }}
+          owner: your-fork-owner
+
+      - uses: leanprover-community/SpliceBot/.github/actions/splice-wf-run@master
+        with:
+          source_workflow: ${{ github.event.workflow_run.name }}
+          # push_to_fork: your-fork-owner/your-fork-repo
+          token: ${{ steps.token.outputs.token }}
+          authz_token: ${{ steps.authz-token.outputs.token }}
+          branch_token: ${{ steps.branch-token.outputs.token }}
 ```
 
 ## Push branch to fork
 
 ```yaml
 jobs:
-  run-reusable:
-    uses: leanprover-community/SpliceBot/.github/workflows/splice_wf_run.yaml@master
-    with:
-      source_workflow: ${{ github.event.workflow_run.name }}
-      push_to_fork: your-fork-owner/your-fork-repo
-      # maintainer_can_modify: "true"
+  run-splice-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: leanprover-community/SpliceBot/.github/actions/splice-wf-run@master
+        with:
+          source_workflow: ${{ github.event.workflow_run.name }}
+          push_to_fork: your-fork-owner/your-fork-repo
+          # maintainer_can_modify: "true"
 ```
 
-Prefer explicit secret passing over `secrets: inherit`.
+Prefer explicit `with:` inputs over implicit secret inheritance.
 
 ***
 
@@ -171,9 +192,9 @@ Notes:
 
 | Token role | Used for | Resolution / fallback order | Required permissions (GitHub App / fine-grained PAT) | Classic PAT scopes | Install target |
 | ---------- | -------- | --------------------------- | ----------------------------------------------------- | ------------------ | -------------- |
-| `token` | Artifact download, checkout, PR create/update, callback comments; also branch push when it is the effective push token | `secrets.token` -> app-minted `token` -> `github.token` | Baseline: `Actions: Read`, `Pull requests: Read & write`, `Contents: Read`; require `Contents: Read & write` when `token` performs branch push (non-fork mode, or fork mode when `branch_token` falls back to `token`) | `repo` (private repos), `public_repo` (public-only repos) | Base repository (and fork too if this token is used as branch fallback) |
-| `authz_token` | Authorization checks (`min_repo_permission`, `allowed_teams`) | `secrets.authz_token` -> app-minted `authz_token` -> `token` -> `github.token` | Repo-permission checks: `Metadata: Read` (repo). Team checks: `Members: Read` (org). | `read:org` for org/team checks; plus `repo` for private repository collaborator checks (`public_repo` for public-only repos) | Base repo/org metadata context |
-| `branch_token` | Push PR branch in `push_to_fork` mode | `secrets.branch_token` -> app-minted `branch_token` -> `token` -> `github.token` | `Contents: Read & write`; often `Workflows: Read & write` if pushed commits include `.github/workflows/*` changes | `repo` (private forks), `public_repo` (public-only forks) | Fork repository |
+| `token` | Artifact download, checkout, PR create/update, callback comments; also branch push when it is the effective push token | provided by caller job | Baseline: `Actions: Read`, `Pull requests: Read & write`, `Contents: Read`; require `Contents: Read & write` when `token` performs branch push (non-fork mode, or fork mode when `branch_token` falls back to `token`) | `repo` (private repos), `public_repo` (public-only repos) | Base repository (and fork too if this token is used as branch fallback) |
+| `authz_token` | Authorization checks (`min_repo_permission`, `allowed_teams`) | `authz_token` -> `token` | Repo-permission checks: `Metadata: Read` (repo). Team checks: `Members: Read` (org). | `read:org` for org/team checks; plus `repo` for private repository collaborator checks (`public_repo` for public-only repos) | Base repo/org metadata context |
+| `branch_token` | Push PR branch in `push_to_fork` mode | `branch_token` -> `token` | `Contents: Read & write`; often `Workflows: Read & write` if pushed commits include `.github/workflows/*` changes | `repo` (private forks), `public_repo` (public-only forks) | Fork repository |
 
 Additional caveats:
 
@@ -192,7 +213,7 @@ Permission mapping references:
 
 ***
 
-# Inputs and Secrets Reference
+# Inputs Reference
 
 ## `splice.yaml` inputs
 
@@ -202,7 +223,7 @@ Permission mapping references:
 | `committer` | string | No | bot user | Committer identity used by privileged workflow. |
 | `author` | string | No | PR author | Author identity used by privileged workflow. |
 
-## `splice_wf_run.yaml` inputs
+## `splice-wf-run` action inputs
 
 | Name | Type | Required | Default | Description |
 | ---- | ---- | -------- | ------- | ----------- |
@@ -213,23 +234,19 @@ Permission mapping references:
 | `allowed_users` | string | No | `''` | Comma/newline-separated GitHub login allowlist. |
 | `push_to_fork` | string | No | `''` | Optional fork destination (`owner/repo`) for PR branches. |
 | `maintainer_can_modify` | string | No | `''` | Optional fork-mode override (`"true"`/`"false"`). |
-| `token_app_owner` | string | No | `''` | Owner used when minting `token` from app credentials. |
-| `authz_token_app_owner` | string | No | `''` | Owner used when minting `authz_token` from app credentials. |
-| `branch_token_app_owner` | string | No | `''` | Owner used when minting `branch_token` from app credentials. |
+| `token` | string | Yes | - | Main API token for artifact download, checkout, and PR operations. |
+| `authz_token` | string | No | `''` | Optional auth-check token for collaborator/team authorization lookups. Falls back to `token`. |
+| `branch_token` | string | No | `''` | Optional branch push token for `push_to_fork` mode. Falls back to `token`. |
 
-## `splice_wf_run.yaml` secrets
+Sensitive values should be passed through action inputs using workflow secrets, for example `token: ${{ secrets.SPLICE_BOT_TOKEN }}`.
+
+## Sensitive `splice-wf-run` action inputs
 
 | Name | Required | Description |
 | ---- | -------- | ----------- |
-| `token` | No | Main API token for artifact download, checkout, and PR operations. |
+| `token` | Yes | Main API token for artifact download, checkout, and PR operations. |
 | `authz_token` | No | Auth-check token for collaborator/team authorization lookups. |
 | `branch_token` | No | Branch push token for `push_to_fork` mode. |
-| `token_app_id` | No | App ID for minting `token` if `token` is absent. |
-| `token_app_private_key` | No | App private key for minting `token` if `token` is absent. |
-| `authz_token_app_id` | No | App ID for minting `authz_token` if `authz_token` is absent (defaults to `token_app_id`). |
-| `authz_token_app_private_key` | No | App private key for minting `authz_token` if absent (defaults to `token_app_private_key`). |
-| `branch_token_app_id` | No | App ID for minting `branch_token` if `branch_token` is absent (defaults to `token_app_id`). |
-| `branch_token_app_private_key` | No | App private key for minting `branch_token` if absent (defaults to `token_app_private_key`). |
 
 ***
 
@@ -263,7 +280,10 @@ References:
 Reusable workflows:
 
 - `.github/workflows/splice.yaml` (unprivileged event parser + bridge emitter)
-- `.github/workflows/splice_wf_run.yaml` (privileged consumer + PR creator)
+
+Actions:
+
+- `.github/actions/splice-wf-run/action.yml` (privileged consumer + PR creator)
 
 Example caller workflows:
 
