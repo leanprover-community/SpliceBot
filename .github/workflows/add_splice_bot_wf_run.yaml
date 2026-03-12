@@ -11,27 +11,33 @@ permissions:
   pull-requests: write
 
 jobs:
-  run-reusable:
+  run-splice-bot:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
-    uses: leanprover-community/SpliceBot/.github/workflows/splice_wf_run.yaml@master
-    with:
-      source_workflow: ${{ github.event.workflow_run.name }}
-      # Optional: push PR branches to a dedicated fork.
-      push_to_fork: leanprover-community/SpliceBot-testing-fork
-      # Installation owner used when minting token from app secrets below.
-      token_app_owner: leanprover-community
-      # Optional override for a different branch-token installation owner.
-      # branch_token_app_owner: leanprover-community
-      # Optional fork-mode override; default is "false" when omitted.
-      # maintainer_can_modify: "true"
-    secrets:
-      # Optional static token; if omitted, token_app_* secrets below are used.
-      # token: ${{ secrets.SPLICE_BOT_TOKEN }}
-      # token_app_id: ${{ secrets.SPLICEBOT_TESTING_APP_ID }}
-      # token_app_private_key: ${{ secrets.SPLICEBOT_TESTING_PRIVATE_KEY }}
-      # authz_token_app_id: ${{ secrets.SPLICEBOT_TESTING_AUTHZ_APP_ID }}
-      # authz_token_app_private_key: ${{ secrets.SPLICEBOT_TESTING_AUTHZ_PRIVATE_KEY }}
-      # Optional static branch token; if omitted, branch_token_app_* (or token_app_*) is used.
-      # branch_token: ${{ secrets.SPLICE_BOT_FORK_TOKEN }}
-      branch_token_app_id: ${{ secrets.SPLICEBOT_TESTING_APP_ID }}
-      branch_token_app_private_key: ${{ secrets.SPLICEBOT_TESTING_PRIVATE_KEY }}
+    runs-on: ubuntu-latest
+    steps:
+      - id: token
+        uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2.2.1
+        with:
+          app-id: ${{ secrets.SPLICEBOT_TESTING_APP_ID }}
+          private-key: ${{ secrets.SPLICEBOT_TESTING_PRIVATE_KEY }}
+          owner: leanprover-community
+
+      - id: branch-token
+        uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2.2.1
+        with:
+          app-id: ${{ secrets.SPLICEBOT_TESTING_APP_ID }}
+          private-key: ${{ secrets.SPLICEBOT_TESTING_PRIVATE_KEY }}
+          owner: leanprover-community
+
+      - uses: leanprover-community/SpliceBot/.github/actions/splice-wf-run@master
+        with:
+          source_workflow: ${{ github.event.workflow_run.name }}
+          # Optional: push PR branches to a dedicated fork.
+          push_to_fork: leanprover-community/SpliceBot-testing-fork
+          # Optional fork-mode override; default is "false" when omitted.
+          # maintainer_can_modify: "true"
+          token: ${{ steps.token.outputs.token }}
+          # Optional separate token for auth checks.
+          # authz_token: ${{ secrets.SPLICE_BOT_AUTHZ_TOKEN }}
+          # Optional separate branch push token for fork mode.
+          branch_token: ${{ steps.branch-token.outputs.token }}
