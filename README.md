@@ -65,7 +65,7 @@ jobs:
 ```
 
 If you always provide `token`/`authz_token`/`branch_token` (or app credentials that mint them), you can set `permissions: {}` on this job.
-If you plan to pass `github.token` as `token`, keep:
+If you want `splice-wf-run` to fall back to `github.token`, keep:
 
 ```yaml
 permissions:
@@ -73,6 +73,8 @@ permissions:
   contents: write
   pull-requests: write
 ```
+
+If this job relies on `github.token` to create the split PR, enable the repository or organization setting that allows GitHub Actions to create pull requests.
 
 `workflow_run.workflows` must match the **exact name** of the trigger workflow.
 
@@ -84,7 +86,11 @@ Looks good for extraction.
 splice-bot
 ```
 
-If the workflow uses only `github.token`, CI generally will not trigger from bot-created pushes/PRs, and `push_to_fork` is not usable.
+If the workflow uses only `github.token`, same-repo operation is possible, but:
+
+- bot-created pushes/PRs generally do not trigger downstream CI
+- `push_to_fork` is not usable
+- `allowed_teams` checks should use an explicit `authz_token`
 
 ***
 
@@ -93,7 +99,7 @@ If the workflow uses only `github.token`, CI generally will not trigger from bot
 For `splice-wf-run` action recipes below:
 
 - Set caller `permissions: {}` only if explicit tokens are always provided (or minted earlier in the same job) for all operations.
-- Otherwise keep caller permissions at least `actions: read`, `contents: write`, and `pull-requests: write` so `github.token` remains usable if you choose to pass it.
+- Otherwise keep caller permissions at least `actions: read`, `contents: write`, and `pull-requests: write` so `github.token` remains usable for same-repo operation if you choose to rely on it.
 
 ## PAT-based token setup
 
@@ -128,7 +134,7 @@ jobs:
         with:
           app-id: ${{ secrets.SPLICEBOT_TESTING_APP_ID }}
           private-key: ${{ secrets.SPLICEBOT_TESTING_PRIVATE_KEY }}
-          owner: your-base-or-fork-owner
+          owner: your-base-owner
 
       - id: authz-token
         uses: actions/create-github-app-token@v2
@@ -163,7 +169,9 @@ jobs:
       - uses: leanprover-community/SpliceBot/.github/actions/splice-wf-run@master
         with:
           source_workflow: ${{ github.event.workflow_run.name }}
+          token: ${{ secrets.SPLICE_BOT_TOKEN }}
           push_to_fork: your-fork-owner/your-fork-repo
+          branch_token: ${{ secrets.SPLICE_BOT_FORK_TOKEN }}
           # maintainer_can_modify: "true"
 ```
 
@@ -192,14 +200,16 @@ Notes:
 
 | Token role | Used for | Resolution / fallback order | Required permissions (GitHub App / fine-grained PAT) | Classic PAT scopes | Install target |
 | ---------- | -------- | --------------------------- | ----------------------------------------------------- | ------------------ | -------------- |
-| `token` | Artifact download, checkout, PR create/update, callback comments; also branch push when it is the effective push token | provided by caller job | Baseline: `Actions: Read`, `Pull requests: Read & write`, `Contents: Read`; require `Contents: Read & write` when `token` performs branch push (non-fork mode, or fork mode when `branch_token` falls back to `token`) | `repo` (private repos), `public_repo` (public-only repos) | Base repository (and fork too if this token is used as branch fallback) |
-| `authz_token` | Authorization checks (`min_repo_permission`, `allowed_teams`) | `authz_token` -> `token` | Repo-permission checks: `Metadata: Read` (repo). Team checks: `Members: Read` (org). | `read:org` for org/team checks; plus `repo` for private repository collaborator checks (`public_repo` for public-only repos) | Base repo/org metadata context |
-| `branch_token` | Push PR branch in `push_to_fork` mode | `branch_token` -> `token` | `Contents: Read & write`; often `Workflows: Read & write` if pushed commits include `.github/workflows/*` changes | `repo` (private forks), `public_repo` (public-only forks) | Fork repository |
+| `token` | Artifact download, checkout, PR create/update, callback comments; also branch push when it is the effective push token | `token` -> `github.token` | Baseline: `Actions: Read`, `Pull requests: Read & write`, `Contents: Read`; require `Contents: Read & write` when `token` performs branch push (non-fork mode, or fork mode when `branch_token` falls back to `token`) | `repo` (private repos), `public_repo` (public-only repos) | Base repository (and fork too if this token is used as branch fallback) |
+| `authz_token` | Authorization checks (`min_repo_permission`, `allowed_teams`) | `authz_token` -> `token` -> `github.token` | Repo-permission checks: `Metadata: Read` (repo). Team checks: `Members: Read` (org). | `read:org` for org/team checks; plus `repo` for private repository collaborator checks (`public_repo` for public-only repos) | Base repo/org metadata context |
+| `branch_token` | Push PR branch in `push_to_fork` mode | `branch_token` -> `token` -> `github.token` | `Contents: Read & write`; often `Workflows: Read & write` if pushed commits include `.github/workflows/*` changes | `repo` (private forks), `public_repo` (public-only forks) | Fork repository |
 
 Additional caveats:
 
 - If `token` resolves to `github.token`, bot-created pushes/PRs typically do not trigger downstream CI.
-- If `branch_token` falls back to `token`, then `token` must satisfy branch push permissions too.
+- If `branch_token` falls back to `token` or `github.token`, that effective token must satisfy branch push permissions too.
+- `github.token` is practical only for same-repo mode. Use an explicit `branch_token` for `push_to_fork`.
+- `github.token` does not expose org members/team-read capability through workflow `permissions`; use an explicit `authz_token` when `allowed_teams` is configured.
 - Recommended for fork safety: install branch-write credentials only on the fork and disable Actions on that fork.
 
 Permission mapping references:
@@ -234,19 +244,19 @@ Permission mapping references:
 | `allowed_users` | string | No | `''` | Comma/newline-separated GitHub login allowlist. |
 | `push_to_fork` | string | No | `''` | Optional fork destination (`owner/repo`) for PR branches. |
 | `maintainer_can_modify` | string | No | `''` | Optional fork-mode override (`"true"`/`"false"`). |
-| `token` | string | Yes | - | Main API token for artifact download, checkout, and PR operations. |
-| `authz_token` | string | No | `''` | Optional auth-check token for collaborator/team authorization lookups. Falls back to `token`. |
-| `branch_token` | string | No | `''` | Optional branch push token for `push_to_fork` mode. Falls back to `token`. |
+| `token` | string | No | `''` | Main API token for artifact download, checkout, and PR operations. Falls back to `github.token`. |
+| `authz_token` | string | No | `''` | Optional auth-check token for collaborator/team authorization lookups. Falls back to `token`, then `github.token`, but `allowed_teams` should use an explicit token with org-membership read access. |
+| `branch_token` | string | No | `''` | Optional branch push token for `push_to_fork` mode. Falls back to `token`, then `github.token`, but fork mode should use an explicit token with write access to the fork. |
 
-Sensitive values should be passed through action inputs using workflow secrets, for example `token: ${{ secrets.SPLICE_BOT_TOKEN }}`.
+Sensitive values should be passed through action inputs using workflow secrets when you do not want to rely on `github.token`, for example `token: ${{ secrets.SPLICE_BOT_TOKEN }}`.
 
 ## Sensitive `splice-wf-run` action inputs
 
 | Name | Required | Description |
 | ---- | -------- | ----------- |
-| `token` | Yes | Main API token for artifact download, checkout, and PR operations. |
-| `authz_token` | No | Auth-check token for collaborator/team authorization lookups. |
-| `branch_token` | No | Branch push token for `push_to_fork` mode. |
+| `token` | No | Main API token for artifact download, checkout, and PR operations. Falls back to `github.token`. |
+| `authz_token` | No | Auth-check token for collaborator/team authorization lookups. Required in practice for `allowed_teams`. |
+| `branch_token` | No | Branch push token for `push_to_fork` mode. Required in practice for fork mode. |
 
 ***
 
