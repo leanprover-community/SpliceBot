@@ -5,6 +5,10 @@ inputs:
   source_workflow:
     description: Name of the source workflow that emitted the bridge artifact
     required: true
+  bridge_run_id:
+    description: Optional producer run id override for manual tests or non-workflow_run harnesses
+    required: false
+    default: ''
   allow_pr_author:
     description: Whether to always allow the PR author to trigger splice-bot
     required: false
@@ -95,6 +99,7 @@ runs:
       with:
         token: ${{ inputs.token || github.token }}
         artifact: workflow-data
+        run_id: ${{ inputs.bridge_run_id || github.event.workflow_run.id }}
         source_workflow: ${{ inputs.source_workflow }}
         require_event: pull_request_review_comment
         fail_on_missing: false

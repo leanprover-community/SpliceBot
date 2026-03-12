@@ -1,0 +1,196 @@
+name: Manual test splice-wf-run
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Existing source PR number to comment back on
+        required: true
+        type: string
+      review_comment_id:
+        description: Existing review comment id used for the backlink in the split PR body
+        required: true
+        type: string
+      file_path:
+        description: File path to extract from the source PR
+        required: true
+        type: string
+      pr_author_login:
+        description: Login of the source PR author
+        required: true
+        type: string
+      head_sha:
+        description: Head commit SHA of the source PR
+        required: true
+        type: string
+      head_ref:
+        description: Head branch name of the source PR
+        required: true
+        type: string
+      commenter_login:
+        description: Login to evaluate against the authorization policy
+        required: false
+        default: ''
+        type: string
+      base_ref:
+        description: Base branch for the split PR
+        required: false
+        default: master
+        type: string
+      base_repo:
+        description: Base repository in owner/repo form
+        required: false
+        default: ''
+        type: string
+      head_repo:
+        description: Head repository in owner/repo form
+        required: false
+        default: ''
+        type: string
+      head_label:
+        description: Optional head label (owner:branch) used in the callback comment
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+
+jobs:
+  emit-test-bridge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve defaults
+        id: defaults
+        shell: bash
+        env:
+          INPUT_BASE_REPO: ${{ inputs.base_repo }}
+          INPUT_HEAD_REPO: ${{ inputs.head_repo }}
+          INPUT_COMMENTER_LOGIN: ${{ inputs.commenter_login }}
+          GITHUB_REPOSITORY_VALUE: ${{ github.repository }}
+          GITHUB_ACTOR_VALUE: ${{ github.actor }}
+        run: |
+          set -euo pipefail
+
+          base_repo="${INPUT_BASE_REPO:-$GITHUB_REPOSITORY_VALUE}"
+          head_repo="${INPUT_HEAD_REPO:-$base_repo}"
+          commenter_login="${INPUT_COMMENTER_LOGIN:-$GITHUB_ACTOR_VALUE}"
+
+          {
+            echo "base_repo=${base_repo}"
+            echo "head_repo=${head_repo}"
+            echo "commenter_login=${commenter_login}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build bridge outputs payload
+        shell: bash
+        env:
+          BASE_REF: ${{ inputs.base_ref }}
+          PR_AUTHOR_LOGIN: ${{ inputs.pr_author_login }}
+        run: |
+          set -euo pipefail
+
+          jq -n \
+            --arg base_ref "${BASE_REF}" \
+            --arg committer "github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>" \
+            --arg author "${PR_AUTHOR_LOGIN} <${PR_AUTHOR_LOGIN}@users.noreply.github.com>" \
+            '{
+              base_ref: $base_ref,
+              committer: $committer,
+              author: $author
+            }' > bridge-outputs.json
+
+      - name: Build bridge metadata override
+        id: meta
+        shell: bash
+        env:
+          PR_NUMBER: ${{ inputs.pr_number }}
+          REVIEW_COMMENT_ID: ${{ inputs.review_comment_id }}
+          FILE_PATH: ${{ inputs.file_path }}
+          COMMENTER_LOGIN: ${{ steps.defaults.outputs.commenter_login }}
+          PR_AUTHOR_LOGIN: ${{ inputs.pr_author_login }}
+          BASE_REPO: ${{ steps.defaults.outputs.base_repo }}
+          HEAD_REPO: ${{ steps.defaults.outputs.head_repo }}
+          HEAD_SHA: ${{ inputs.head_sha }}
+          HEAD_REF: ${{ inputs.head_ref }}
+          HEAD_LABEL: ${{ inputs.head_label }}
+        run: |
+          set -euo pipefail
+
+          meta_json="$(jq -cn \
+            --argjson pr_number "${PR_NUMBER}" \
+            --argjson review_comment_id "${REVIEW_COMMENT_ID}" \
+            --arg file_path "${FILE_PATH}" \
+            --arg commenter_login "${COMMENTER_LOGIN}" \
+            --arg pr_author_login "${PR_AUTHOR_LOGIN}" \
+            --arg base_repo "${BASE_REPO}" \
+            --arg head_repo "${HEAD_REPO}" \
+            --arg head_sha "${HEAD_SHA}" \
+            --arg head_ref "${HEAD_REF}" \
+            --arg head_label "${HEAD_LABEL}" \
+            '{
+              pr_number: $pr_number,
+              event_name: "pull_request_review_comment",
+              event: {
+                comment: {
+                  id: $review_comment_id,
+                  path: $file_path,
+                  user: { login: $commenter_login }
+                },
+                pull_request: {
+                  user: { login: $pr_author_login },
+                  base: {
+                    repo: { full_name: $base_repo }
+                  },
+                  head: {
+                    repo: { full_name: $head_repo },
+                    sha: $head_sha,
+                    ref: $head_ref,
+                    label: $head_label
+                  }
+                }
+              }
+            }')"
+
+          {
+            echo "json<<EOF"
+            echo "${meta_json}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Emit synthetic bridge artifact
+        uses: leanprover-community/privilege-escalation-bridge/emit@v1
+        with:
+          artifact: workflow-data
+          outputs_file: bridge-outputs.json
+          meta: ${{ steps.meta.outputs.json }}
+          include_event: none
+          retention_days: 1
+
+  run-local-action:
+    needs: emit-test-bridge
+    runs-on: ubuntu-latest
+    env:
+      TEST_APP_ID: ${{ secrets.SPLICEBOT_TESTING_APP_ID }}
+      TEST_PRIVATE_KEY: ${{ secrets.SPLICEBOT_TESTING_PRIVATE_KEY }}
+    steps:
+      - name: Check out current branch
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Mint base-repo token when test secrets are available
+        id: token
+        if: ${{ env.TEST_APP_ID != '' && env.TEST_PRIVATE_KEY != '' }}
+        uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2.2.1
+        with:
+          app-id: ${{ env.TEST_APP_ID }}
+          private-key: ${{ env.TEST_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+
+      - name: Run local splice-wf-run action
+        uses: ./.github/actions/splice-wf-run
+        with:
+          source_workflow: ${{ github.workflow }}
+          bridge_run_id: ${{ github.run_id }}
+          token: ${{ steps.token.outputs.token }}

@@ -177,6 +177,47 @@ jobs:
 
 Prefer explicit `with:` inputs over implicit secret inheritance.
 
+## Manual PR-branch test
+
+To test the current branch before merge, run [`manual_test_splice_wf_run.yaml`](./.github/workflows/manual_test_splice_wf_run.yaml) with `workflow_dispatch`.
+
+This workflow emits a synthetic bridge artifact in one job, then runs the local `./.github/actions/splice-wf-run` action in a second job. It avoids the default-branch limitation of `workflow_run`.
+
+Provide these inputs from one existing source PR:
+
+- `pr_number`: the PR number to comment back on
+- `review_comment_id`: the numeric id of an existing review comment on that PR
+- `file_path`: the commented file path, for example `README.md`
+- `pr_author_login`: the source PR author login
+- `head_sha`: the current head commit SHA of the source PR
+- `head_ref`: the source PR branch name
+
+Optional inputs:
+
+- `commenter_login`: defaults to the workflow actor
+- `base_ref`: defaults to `master`
+- `base_repo`: defaults to the current repository
+- `head_repo`: defaults to `base_repo`
+- `head_label`: optional `owner:branch` label used in the callback comment
+
+Example manual test inputs:
+
+```text
+pr_number: 123
+review_comment_id: 456789012
+file_path: README.md
+pr_author_login: octocat
+head_sha: 0123456789abcdef0123456789abcdef01234567
+head_ref: feature/test-splice
+commenter_login: trusted-maintainer
+base_ref: master
+base_repo: leanprover-community/SpliceBot
+head_repo: leanprover-community/SpliceBot
+head_label: leanprover-community:feature/test-splice
+```
+
+If `SPLICEBOT_TESTING_APP_ID` and `SPLICEBOT_TESTING_PRIVATE_KEY` are configured, the manual test will mint the same base-repo app token used by the existing test workflow. Otherwise it falls back to `github.token`, which is only suitable for same-repo testing.
+
 ***
 
 # Authorization Model
@@ -238,6 +279,7 @@ Permission mapping references:
 | Name | Type | Required | Default | Description |
 | ---- | ---- | -------- | ------- | ----------- |
 | `source_workflow` | string | Yes | - | Name of the source workflow that emitted the bridge artifact. |
+| `bridge_run_id` | string | No | `''` | Optional producer run id override for manual tests or non-`workflow_run` harnesses. |
 | `allow_pr_author` | boolean | No | `true` | Always allow PR author to trigger. |
 | `min_repo_permission` | string | No | `anyone` | Minimum permission threshold: `anyone`, `triage`, `write`. |
 | `allowed_teams` | string | No | `''` | Comma/newline-separated team allowlist (`team-slug` or `org/team-slug`). |
