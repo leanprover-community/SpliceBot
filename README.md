@@ -177,46 +177,32 @@ jobs:
 
 Prefer explicit `with:` inputs over implicit secret inheritance.
 
-## Manual PR-branch test
+## Synthetic PR-branch integration test
 
-To test the current branch before merge, run [`manual_test_splice_wf_run.yaml`](./.github/workflows/manual_test_splice_wf_run.yaml) with `workflow_dispatch`.
+[`manual_test_splice_wf_run.yaml`](./.github/workflows/manual_test_splice_wf_run.yaml) now runs a synthetic dry-run integration suite against the local `./.github/actions/splice-wf-run` action.
 
-This workflow emits a synthetic bridge artifact in one job, then runs the local `./.github/actions/splice-wf-run` action in a second job. It avoids the default-branch limitation of `workflow_run`.
+On `pull_request`, it:
 
-Provide these inputs from one existing source PR:
+- checks out the action at the PR head SHA
+- auto-selects one changed file from the PR
+- emits synthetic bridge artifacts with several authorization/input combinations
+- runs `splice-wf-run` in `dry_run` mode and asserts expected pass/fail outcomes
 
-- `pr_number`: the PR number to comment back on
-- `review_comment_id`: the numeric id of an existing review comment on that PR
-- `file_path`: the commented file path, for example `README.md`
-- `pr_author_login`: the source PR author login
-- `head_sha`: the current head commit SHA of the source PR
-- `head_ref`: the source PR branch name
+The current matrix covers:
 
-Optional inputs:
+- PR author authorization succeeds
+- `allowed_users` authorization succeeds
+- invalid `min_repo_permission` fails
+- invalid `push_to_fork` input fails
+- unauthorized commenter fails
 
-- `commenter_login`: defaults to the workflow actor
-- `base_ref`: defaults to `master`
-- `base_repo`: defaults to the current repository
-- `head_repo`: defaults to `base_repo`
-- `head_label`: optional `owner:branch` label used in the callback comment
+On `workflow_dispatch`, provide:
 
-Example manual test inputs:
+- `action_ref`: optional ref or SHA to test; defaults to the current SHA
+- `file_path`: required existing changed file path for the tested ref
+- `base_ref`: optional base branch; defaults to `master`
 
-```text
-pr_number: 123
-review_comment_id: 456789012
-file_path: README.md
-pr_author_login: octocat
-head_sha: 0123456789abcdef0123456789abcdef01234567
-head_ref: feature/test-splice
-commenter_login: trusted-maintainer
-base_ref: master
-base_repo: leanprover-community/SpliceBot
-head_repo: leanprover-community/SpliceBot
-head_label: leanprover-community:feature/test-splice
-```
-
-If `SPLICEBOT_TESTING_APP_ID` and `SPLICEBOT_TESTING_PRIVATE_KEY` are configured, the manual test will mint the same base-repo app token used by the existing test workflow. Otherwise it falls back to `github.token`, which is only suitable for same-repo testing.
+This synthetic workflow does not open split PRs or post callback comments. It is meant to validate bridge consumption, authorization, patch staging, and input validation before merge.
 
 ***
 
@@ -280,6 +266,7 @@ Permission mapping references:
 | ---- | ---- | -------- | ------- | ----------- |
 | `source_workflow` | string | Yes | - | Name of the source workflow that emitted the bridge artifact. |
 | `bridge_run_id` | string | No | `''` | Optional producer run id override for manual tests or non-`workflow_run` harnesses. |
+| `bridge_artifact` | string | No | `workflow-data` | Optional bridge artifact name override for tests or alternate harnesses. |
 | `allow_pr_author` | boolean | No | `true` | Always allow PR author to trigger. |
 | `min_repo_permission` | string | No | `anyone` | Minimum permission threshold: `anyone`, `triage`, `write`. |
 | `allowed_teams` | string | No | `''` | Comma/newline-separated team allowlist (`team-slug` or `org/team-slug`). |
@@ -289,6 +276,15 @@ Permission mapping references:
 | `token` | string | No | `''` | Main API token for artifact download, checkout, and PR operations. Falls back to `github.token`. |
 | `authz_token` | string | No | `''` | Optional auth-check token for collaborator/team authorization lookups. Falls back to `token`, then `github.token`, but `allowed_teams` should use an explicit token with org-membership read access. |
 | `branch_token` | string | No | `''` | Optional branch push token for `push_to_fork` mode. Falls back to `token`, then `github.token`, but fork mode should use an explicit token with write access to the fork. |
+| `dry_run` | string | No | `false` | Run in validation-only mode after authorization, patch staging, and input validation; skip PR creation and callback comments. |
+
+## `splice-wf-run` action outputs
+
+| Name | Description |
+| ---- | ----------- |
+| `execution_mode` | `validation-only` when `dry_run=true`, otherwise `create-pull-request` on successful PR-creation runs. |
+| `branch` | Generated branch name when a branch candidate was computed successfully. |
+| `pull_request_number` | Created pull request number, if the action opened or updated a PR. |
 
 Sensitive values should be passed through action inputs using workflow secrets when you do not want to rely on `github.token`, for example `token: ${{ secrets.SPLICE_BOT_TOKEN }}`.
 
