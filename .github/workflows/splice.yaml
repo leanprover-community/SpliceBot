@@ -58,15 +58,21 @@ jobs:
             const comment = context.payload?.comment;
             const pr = context.payload?.pull_request;
             const body = comment?.body || "";
+            const triggerLine = body
+              .split(/\r?\n/)
+              .find((line) => /^splice-bot\b/i.test(line));
 
             core.info(`Comment body:\n---\n${body}\n---`);
 
             // Start-of-line match across lines; no leading whitespace allowed
-            if (!/^splice-bot\b/im.test(body)) {
+            if (!triggerLine) {
               core.info("No `splice-bot` found at the start of a line, skipping.");
               core.setOutput("skip", "true");
               return;
             }
+
+            const triggerKeyword = triggerLine.replace(/^splice-bot\b/i, "").trim().split(/\s+/)[0] || "";
+            core.info(`Trigger keyword: ${triggerKeyword || "(none)"}`);
 
             const path = comment?.path;
             if (!path) {
@@ -106,16 +112,19 @@ jobs:
             core.setOutput("skip", "false");
             // IMPORTANT: base_ref now comes from the reusable workflow input (default master)
             core.setOutput("base_ref", baseRefFromInput);
+            core.setOutput("trigger_keyword", triggerKeyword);
 
       - if: ${{ steps.extract.outputs.skip != 'true' }}
         name: Prepare bridge outputs
         run: |
           jq -n \
             --arg base_ref "${{ steps.extract.outputs.base_ref }}" \
+            --arg trigger_keyword "${{ steps.extract.outputs.trigger_keyword }}" \
             --arg committer "${{ inputs.committer }}" \
             --arg author "${{ inputs.author }}" \
             '{
               base_ref: $base_ref,
+              trigger_keyword: $trigger_keyword,
               committer: $committer,
               author: $author,
             }' > bridge-outputs.json

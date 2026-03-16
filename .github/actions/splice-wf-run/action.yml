@@ -10,7 +10,7 @@ inputs:
     required: false
     default: 'true'
   min_repo_permission:
-    description: Minimum repo permission allowed to trigger splice-bot (anyone, triage, write)
+    description: Minimum repo permission allowed to trigger splice-bot (anyone, triage, write, maintain, admin)
     required: false
     default: 'anyone'
   allowed_teams:
@@ -19,6 +19,10 @@ inputs:
     default: ''
   allowed_users:
     description: Optional comma/newline-separated GitHub login allowlist
+    required: false
+    default: ''
+  label_commands:
+    description: Optional YAML or JSON array of label command objects ({command|keyword, label, min_repo_permission?, allowed_users?, allowed_teams?})
     required: false
     default: ''
   push_to_fork:
@@ -105,6 +109,7 @@ runs:
           commenter_login=event.comment.user.login
           pr_author_login=event.pull_request.user.login
           base_ref=outputs.base_ref
+          trigger_keyword=outputs.trigger_keyword
           base_repo=event.pull_request.base.repo.full_name
           head_repo=event.pull_request.head.repo.full_name
           head_sha=event.pull_request.head.sha
@@ -112,6 +117,113 @@ runs:
           head_label=event.pull_request.head.label
           committer=outputs.committer
           author=outputs.author
+
+    - name: Resolve configured trigger command
+      if: steps.bridge.outputs.file_path != ''
+      id: resolve_trigger_command
+      shell: bash
+      env:
+        RAW_LABEL_COMMANDS: ${{ inputs.label_commands }}
+        TRIGGER_KEYWORD: ${{ steps.bridge.outputs.trigger_keyword }}
+      run: |
+        set -euo pipefail
+
+        ruby <<'RUBY'
+        require 'json'
+        require 'yaml'
+
+        raw_commands = ENV.fetch('RAW_LABEL_COMMANDS', '')
+        trigger_keyword = ENV.fetch('TRIGGER_KEYWORD', '').strip.downcase
+        output_path = ENV.fetch('GITHUB_OUTPUT')
+
+        def set_output(path, key, value)
+          File.open(path, 'a') { |f| f.puts("#{key}=#{value}") }
+        end
+
+        def normalize_list(value)
+          case value
+          when nil
+            []
+          when Array
+            value
+          else
+            value.to_s.split(/[\n,]/)
+          end
+            .map { |item| item.to_s.strip.downcase }
+            .reject(&:empty?)
+        end
+
+        if trigger_keyword.empty?
+          set_output(output_path, 'trigger_mode', 'splice')
+          exit 0
+        end
+
+        if raw_commands.strip.empty?
+          set_output(output_path, 'trigger_mode', 'unknown')
+          set_output(output_path, 'resolve_error', "No label_commands configured for keyword '#{trigger_keyword}'.")
+          exit 0
+        end
+
+        begin
+          parsed = YAML.safe_load(raw_commands, permitted_classes: [], aliases: false)
+        rescue StandardError => e
+          set_output(output_path, 'trigger_mode', 'invalid')
+          set_output(output_path, 'resolve_error', "Could not parse label_commands: #{e.message}")
+          exit 0
+        end
+
+        unless parsed.is_a?(Array)
+          set_output(output_path, 'trigger_mode', 'invalid')
+          set_output(output_path, 'resolve_error', 'label_commands must parse to an array.')
+          exit 0
+        end
+
+        begin
+          normalized = parsed.map.with_index do |entry, index|
+            unless entry.is_a?(Hash)
+              raise "label_commands[#{index}] must be an object."
+            end
+
+            keyword = (entry['command'] || entry[:command] || entry['keyword'] || entry[:keyword] || '').to_s.strip.downcase
+            label = (entry['label'] || entry[:label] || '').to_s.strip
+            min_repo_permission = (entry['min_repo_permission'] || entry[:min_repo_permission] || 'write').to_s.strip.downcase
+            allowed_users = normalize_list(entry['allowed_users'] || entry[:allowed_users])
+            allowed_teams = normalize_list(entry['allowed_teams'] || entry[:allowed_teams])
+            type = (entry['type'] || entry[:type] || 'add-label').to_s.strip.downcase
+
+            raise "label_commands[#{index}] is missing command/keyword." if keyword.empty?
+            raise "label_commands[#{index}] is missing label." if label.empty?
+            raise "label_commands[#{index}] has unsupported type '#{type}'." unless type == 'add-label'
+            raise "label_commands[#{index}] has invalid min_repo_permission '#{min_repo_permission}'." unless %w[anyone triage write maintain admin].include?(min_repo_permission)
+
+            {
+              'command' => keyword,
+              'label' => label,
+              'min_repo_permission' => min_repo_permission,
+              'allowed_users' => allowed_users,
+              'allowed_teams' => allowed_teams,
+            }
+          end
+        rescue StandardError => e
+          set_output(output_path, 'trigger_mode', 'invalid')
+          set_output(output_path, 'resolve_error', e.message)
+          exit 0
+        end
+
+        match = normalized.find { |entry| entry['command'] == trigger_keyword }
+        if match.nil?
+          set_output(output_path, 'trigger_mode', 'unknown')
+          set_output(output_path, 'resolve_error', "No label command matched keyword '#{trigger_keyword}'.")
+          exit 0
+        end
+
+        set_output(output_path, 'trigger_mode', 'label')
+        set_output(output_path, 'label_command', match['command'])
+        set_output(output_path, 'label_name', match['label'])
+        set_output(output_path, 'label_min_repo_permission', match['min_repo_permission'])
+        set_output(output_path, 'label_allowed_users_json', JSON.generate(match['allowed_users']))
+        set_output(output_path, 'label_allowed_teams_json', JSON.generate(match['allowed_teams']))
+        RUBY
 
     - name: Authorize commenter
       if: steps.bridge.outputs.file_path != ''
@@ -167,10 +279,10 @@ runs:
 
           const allowedTeams = parseList(rawAllowedTeams);
           const allowedUsers = parseList(rawAllowedUsers);
-          const validMinPermissions = new Set(['anyone', 'triage', 'write']);
+          const validMinPermissions = new Set(['anyone', 'triage', 'write', 'maintain', 'admin']);
           if (!validMinPermissions.has(minRepoPermission)) {
             failError(
-              `Invalid min_repo_permission '${minRepoPermission}'. Expected one of: anyone, triage, write.`,
+              `Invalid min_repo_permission '${minRepoPermission}'. Expected one of: anyone, triage, write, maintain, admin.`,
               [
                 `commenter: ${commenterLogin || '(missing)'}`,
                 `base repo: ${baseRepo || '(missing)'}`,
@@ -208,7 +320,14 @@ runs:
             maintain: 4,
             admin: 5,
           };
-          const minThreshold = minRepoPermission === 'triage' ? permissionRank.triage : minRepoPermission === 'write' ? permissionRank.write : null;
+          const thresholdByPermission = {
+            anyone: null,
+            triage: permissionRank.triage,
+            write: permissionRank.write,
+            maintain: permissionRank.maintain,
+            admin: permissionRank.admin,
+          };
+          const minThreshold = thresholdByPermission[minRepoPermission];
           let repoPermission = 'not-checked';
           const matchedRules = [];
           const buildDetails = () =>
@@ -352,8 +471,289 @@ runs:
             buildDetails()
           );
 
+    - name: Authorize label command
+      if: steps.bridge.outputs.file_path != '' && steps.resolve_trigger_command.outputs.trigger_mode == 'label' && steps.authorize_commenter.outcome == 'success'
+      id: authorize_label_command
+      uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+      env:
+        COMMENTER_LOGIN: ${{ steps.bridge.outputs.commenter_login }}
+        BASE_REPO: ${{ steps.bridge.outputs.base_repo }}
+        LABEL_COMMAND: ${{ steps.resolve_trigger_command.outputs.label_command }}
+        LABEL_NAME: ${{ steps.resolve_trigger_command.outputs.label_name }}
+        MIN_REPO_PERMISSION: ${{ steps.resolve_trigger_command.outputs.label_min_repo_permission }}
+        RAW_ALLOWED_USERS_JSON: ${{ steps.resolve_trigger_command.outputs.label_allowed_users_json }}
+        RAW_ALLOWED_TEAMS_JSON: ${{ steps.resolve_trigger_command.outputs.label_allowed_teams_json }}
+        AUTHZ_TOKEN_SOURCE: ${{ steps.token_mode.outputs.authz_token_source }}
+      with:
+        github-token: ${{ inputs.authz_token || inputs.token || github.token }}
+        script: |
+          const commenterLogin = (process.env.COMMENTER_LOGIN || '').trim();
+          const baseRepo = (process.env.BASE_REPO || '').trim();
+          const labelCommand = (process.env.LABEL_COMMAND || '').trim();
+          const labelName = (process.env.LABEL_NAME || '').trim();
+          const minRepoPermission = (process.env.MIN_REPO_PERMISSION || 'write').trim().toLowerCase();
+          const rawAllowedUsersJson = process.env.RAW_ALLOWED_USERS_JSON || '[]';
+          const rawAllowedTeamsJson = process.env.RAW_ALLOWED_TEAMS_JSON || '[]';
+          const authzTokenSource = process.env.AUTHZ_TOKEN_SOURCE || 'unknown';
+
+          const parseJsonList = (raw, fieldName) => {
+            try {
+              const parsed = JSON.parse(raw);
+              if (!Array.isArray(parsed)) {
+                throw new Error(`${fieldName} must be an array.`);
+              }
+              return parsed.map((item) => String(item).trim().toLowerCase()).filter(Boolean);
+            } catch (error) {
+              throw new Error(`Could not parse ${fieldName}: ${error.message}`);
+            }
+          };
+
+          const setOutputs = (decision, reason, details) => {
+            core.setOutput('authz_decision', decision);
+            core.setOutput('authz_reason', reason);
+            core.setOutput('authz_details', details);
+            core.setOutput('authz_token_source', authzTokenSource);
+          };
+
+          const fail = (reason, details) => {
+            core.error(reason);
+            core.info(details);
+            setOutputs('error', reason, details);
+            core.setFailed(reason);
+          };
+
+          const deny = (reason, details) => {
+            core.warning(reason);
+            core.info(details);
+            setOutputs('deny', reason, details);
+            core.setFailed(reason);
+          };
+
+          let allowedUsers;
+          let allowedTeams;
+          try {
+            allowedUsers = parseJsonList(rawAllowedUsersJson, 'label allowed_users');
+            allowedTeams = parseJsonList(rawAllowedTeamsJson, 'label allowed_teams');
+          } catch (error) {
+            fail(error.message, [
+              `label command: ${labelCommand || '(missing)'}`,
+              `label: ${labelName || '(missing)'}`,
+            ].join('\n'));
+            return;
+          }
+
+          if (!commenterLogin || !baseRepo || !labelCommand || !labelName) {
+            fail(
+              'Missing label command authorization inputs.',
+              [
+                `commenter_login: ${commenterLogin || '(missing)'}`,
+                `base_repo: ${baseRepo || '(missing)'}`,
+                `label_command: ${labelCommand || '(missing)'}`,
+                `label_name: ${labelName || '(missing)'}`,
+              ].join('\n')
+            );
+            return;
+          }
+
+          const [owner, repo] = baseRepo.split('/');
+          if (!owner || !repo || baseRepo.split('/').length !== 2) {
+            fail(`Invalid base repo format '${baseRepo}'. Expected owner/repo.`, `base_repo: ${baseRepo}`);
+            return;
+          }
+
+          const permissionRank = {
+            none: 0,
+            read: 1,
+            triage: 2,
+            write: 3,
+            maintain: 4,
+            admin: 5,
+          };
+          const thresholdByPermission = {
+            anyone: null,
+            triage: permissionRank.triage,
+            write: permissionRank.write,
+            maintain: permissionRank.maintain,
+            admin: permissionRank.admin,
+          };
+          if (!(minRepoPermission in thresholdByPermission)) {
+            fail(
+              `Invalid label command min_repo_permission '${minRepoPermission}'. Expected one of: anyone, triage, write, maintain, admin.`,
+              `label command: ${labelCommand}`
+            );
+            return;
+          }
+          const minThreshold = thresholdByPermission[minRepoPermission];
+          let repoPermission = 'not-checked';
+          const matchedRules = [];
+
+          const buildDetails = () => [
+            `commenter: ${commenterLogin}`,
+            `base repo: ${baseRepo}`,
+            `label command: ${labelCommand}`,
+            `label: ${labelName}`,
+            `required repo permission: ${minRepoPermission}`,
+            `observed_repo_permission: ${repoPermission}`,
+            `allowed_users: ${allowedUsers.length > 0 ? allowedUsers.join(', ') : '(none)'}`,
+            `allowed_teams: ${allowedTeams.length > 0 ? allowedTeams.join(', ') : '(none)'}`,
+            `matched_rules: ${matchedRules.length > 0 ? matchedRules.join(', ') : '(none)'}`,
+            `authz token source: ${authzTokenSource}`,
+          ].join('\n');
+          const authorize = () => {
+            const reason = `Authorized label command '${labelCommand}' for ${commenterLogin} via ${matchedRules.join(', ')}.`;
+            const details = buildDetails();
+            core.info(reason);
+            core.info(details);
+            setOutputs('allow', reason, details);
+          };
+
+          if (allowedUsers.includes(commenterLogin.toLowerCase())) {
+            matchedRules.push('allowed-users');
+          }
+
+          if (matchedRules.length > 0) {
+            authorize();
+            return;
+          }
+
+          if (minRepoPermission === 'anyone') {
+            matchedRules.push('repo-permission>=anyone');
+            authorize();
+            return;
+          }
+
+          if (minThreshold !== null) {
+            try {
+              const { data } = await github.rest.repos.getCollaboratorPermissionLevel({
+                owner,
+                repo,
+                username: commenterLogin,
+              });
+              repoPermission = (data.permission || 'none').toLowerCase();
+            } catch (error) {
+              if (error.status === 404) {
+                repoPermission = 'none';
+              } else {
+                fail(
+                  `Unable to resolve collaborator permission for ${commenterLogin} on ${baseRepo}: ${error.message}`,
+                  [
+                    `authz token source: ${authzTokenSource}`,
+                    'Provide authz_token with sufficient read access if needed.',
+                  ].join('\n')
+                );
+                return;
+              }
+            }
+
+            const observedRank = permissionRank[repoPermission] ?? permissionRank.none;
+            if (observedRank >= minThreshold) {
+              matchedRules.push(`repo-permission>=${minRepoPermission}`);
+              authorize();
+              return;
+            }
+          }
+
+          if (allowedTeams.length > 0) {
+            let ownerType = 'Unknown';
+            try {
+              const { data: repoData } = await github.rest.repos.get({ owner, repo });
+              ownerType = repoData.owner?.type || 'Unknown';
+            } catch (error) {
+              fail(
+                `Unable to resolve repository owner type for ${baseRepo}: ${error.message}`,
+                [
+                  `authz token source: ${authzTokenSource}`,
+                  'Provide authz_token with repository read access if needed.',
+                ].join('\n')
+              );
+              return;
+            }
+
+            if (ownerType !== 'Organization') {
+              deny(
+                `label command allowed_teams was configured, but ${baseRepo} is not organization-owned.`,
+                [
+                  `commenter: ${commenterLogin}`,
+                  `base repo owner type: ${ownerType}`,
+                  `configured teams: ${allowedTeams.join(', ')}`,
+                ].join('\n')
+              );
+              return;
+            }
+
+            for (const teamSpec of allowedTeams) {
+              const parts = teamSpec.split('/');
+              const teamOrg = parts.length === 2 ? parts[0] : owner;
+              const teamSlug = parts.length === 2 ? parts[1] : teamSpec;
+              if (!teamOrg || !teamSlug) {
+                fail(`Invalid label command team spec '${teamSpec}'. Use team-slug or org/team-slug.`, `configured teams: ${allowedTeams.join(', ')}`);
+                return;
+              }
+
+              try {
+                const { data } = await github.rest.teams.getMembershipForUserInOrg({
+                  org: teamOrg,
+                  team_slug: teamSlug,
+                  username: commenterLogin,
+                });
+                if (data.state === 'active') {
+                  matchedRules.push(`team:${teamOrg}/${teamSlug}`);
+                  authorize();
+                  return;
+                }
+              } catch (error) {
+                if (error.status === 404) {
+                  core.info(`User ${commenterLogin} is not an active member of ${teamOrg}/${teamSlug}.`);
+                  continue;
+                }
+                fail(
+                  `Unable to verify team membership for ${teamOrg}/${teamSlug}: ${error.message}`,
+                  [
+                    `authz token source: ${authzTokenSource}`,
+                    'Provide authz_token with organization team/membership read permissions if needed.',
+                  ].join('\n')
+                );
+                return;
+              }
+            }
+          }
+
+          deny(
+            `Commenter ${commenterLogin} is not authorized to run label command '${labelCommand}'.`,
+            buildDetails()
+          );
+
+    - name: Apply configured label
+      if: steps.bridge.outputs.file_path != '' && steps.resolve_trigger_command.outputs.trigger_mode == 'label' && steps.authorize_label_command.outcome == 'success'
+      id: apply_label
+      uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+      env:
+        BASE_REPO: ${{ steps.bridge.outputs.base_repo }}
+        PR_NUMBER: ${{ steps.bridge.outputs.pr_number }}
+        LABEL_NAME: ${{ steps.resolve_trigger_command.outputs.label_name }}
+      with:
+        github-token: ${{ inputs.token || github.token }}
+        script: |
+          const baseRepo = (process.env.BASE_REPO || '').trim();
+          const prNumber = Number(process.env.PR_NUMBER || '');
+          const labelName = (process.env.LABEL_NAME || '').trim();
+          const [owner, repo] = baseRepo.split('/');
+
+          if (!owner || !repo || !Number.isFinite(prNumber) || prNumber <= 0 || !labelName) {
+            core.setFailed('Missing label application inputs.');
+            return;
+          }
+
+          await github.rest.issues.addLabels({
+            owner,
+            repo,
+            issue_number: prNumber,
+            labels: [labelName],
+          });
+          core.info(`Applied label '${labelName}' to PR #${prNumber}.`);
+
     - name: Check out BASE (PR base repo @ base_ref)
-      if: steps.bridge.outputs.file_path != ''
+      if: steps.bridge.outputs.file_path != '' && steps.resolve_trigger_command.outputs.trigger_mode == 'splice'
       id: checkout_base
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       with:
@@ -364,7 +764,7 @@ runs:
         path: base
 
     - name: Check out HEAD (PR head repo)
-      if: steps.bridge.outputs.file_path != ''
+      if: steps.bridge.outputs.file_path != '' && steps.resolve_trigger_command.outputs.trigger_mode == 'splice'
       id: checkout_head
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       with:
@@ -375,7 +775,7 @@ runs:
         path: head
 
     - name: Stage file changes via 3-way patch apply
-      if: steps.bridge.outputs.file_path != ''
+      if: steps.bridge.outputs.file_path != '' && steps.resolve_trigger_command.outputs.trigger_mode == 'splice'
       id: branch_and_copy
       shell: bash
       run: |
@@ -439,7 +839,7 @@ runs:
         fi
 
     - name: Detect push_to_fork owner type
-      if: inputs.push_to_fork != ''
+      if: steps.bridge.outputs.file_path != '' && steps.resolve_trigger_command.outputs.trigger_mode == 'splice' && inputs.push_to_fork != ''
       id: fork_owner
       uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
       with:
@@ -462,7 +862,7 @@ runs:
           }
 
     - name: Validate create-pull-request inputs
-      if: steps.bridge.outputs.file_path != '' && steps.authorize_commenter.outcome == 'success' && steps.branch_and_copy.outputs.NO_CHANGES != 'true' && steps.branch_and_copy.outputs.APPLY_FAILED != 'true'
+      if: steps.bridge.outputs.file_path != '' && steps.resolve_trigger_command.outputs.trigger_mode == 'splice' && steps.authorize_commenter.outcome == 'success' && steps.branch_and_copy.outputs.NO_CHANGES != 'true' && steps.branch_and_copy.outputs.APPLY_FAILED != 'true'
       id: validate_cpr_inputs
       shell: bash
       env:
@@ -519,7 +919,7 @@ runs:
         fi
 
     - name: Create Pull Request
-      if: steps.bridge.outputs.file_path != '' && steps.authorize_commenter.outcome == 'success' && steps.branch_and_copy.outputs.NO_CHANGES != 'true' && steps.branch_and_copy.outputs.APPLY_FAILED != 'true' && steps.validate_cpr_inputs.outcome == 'success'
+      if: steps.bridge.outputs.file_path != '' && steps.resolve_trigger_command.outputs.trigger_mode == 'splice' && steps.authorize_commenter.outcome == 'success' && steps.branch_and_copy.outputs.NO_CHANGES != 'true' && steps.branch_and_copy.outputs.APPLY_FAILED != 'true' && steps.validate_cpr_inputs.outcome == 'success'
       id: cpr
       uses: peter-evans/create-pull-request@98357b18bf14b5342f975ff684046ec3b2a07725 #v8.0.0
       with:
@@ -548,11 +948,19 @@ runs:
       if: always() && steps.bridge.outputs.pr_number != ''
       uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
       env:
+        TRIGGER_MODE: ${{ steps.resolve_trigger_command.outputs.trigger_mode }}
+        TRIGGER_KEYWORD: ${{ steps.bridge.outputs.trigger_keyword }}
+        TRIGGER_RESOLVE_ERROR: ${{ steps.resolve_trigger_command.outputs.resolve_error }}
         AUTHZ_OUTCOME: ${{ steps.authorize_commenter.outcome }}
         AUTHZ_DECISION: ${{ steps.authorize_commenter.outputs.authz_decision }}
         AUTHZ_REASON: ${{ steps.authorize_commenter.outputs.authz_reason }}
         AUTHZ_DETAILS: ${{ steps.authorize_commenter.outputs.authz_details }}
         AUTHZ_TOKEN_SOURCE: ${{ steps.authorize_commenter.outputs.authz_token_source }}
+        LABEL_AUTHZ_OUTCOME: ${{ steps.authorize_label_command.outcome }}
+        LABEL_AUTHZ_DECISION: ${{ steps.authorize_label_command.outputs.authz_decision }}
+        LABEL_AUTHZ_REASON: ${{ steps.authorize_label_command.outputs.authz_reason }}
+        LABEL_AUTHZ_DETAILS: ${{ steps.authorize_label_command.outputs.authz_details }}
+        LABEL_AUTHZ_TOKEN_SOURCE: ${{ steps.authorize_label_command.outputs.authz_token_source }}
       with:
         github-token: ${{ inputs.token || github.token }}
         script: |
@@ -569,6 +977,11 @@ runs:
           const headLabel = '${{ steps.bridge.outputs.head_label }}';
           const sourceBranch = headLabel || headRef;
           const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}/attempts/${process.env.GITHUB_RUN_ATTEMPT}`;
+          const triggerMode = process.env.TRIGGER_MODE || 'splice';
+          const triggerKeyword = process.env.TRIGGER_KEYWORD || '';
+          const triggerResolveError = process.env.TRIGGER_RESOLVE_ERROR || '';
+          const labelCommand = '${{ steps.resolve_trigger_command.outputs.label_command }}';
+          const labelName = '${{ steps.resolve_trigger_command.outputs.label_name }}';
           const tokenSource = '${{ steps.token_mode.outputs.token_source }}';
           const branchTokenSource = '${{ steps.token_mode.outputs.branch_token_source }}';
           const authzOutcome = process.env.AUTHZ_OUTCOME || '';
@@ -576,6 +989,12 @@ runs:
           const authzReason = process.env.AUTHZ_REASON || '';
           const authzDetails = process.env.AUTHZ_DETAILS || '';
           const authzTokenSource = process.env.AUTHZ_TOKEN_SOURCE || 'unknown';
+          const labelAuthzOutcome = process.env.LABEL_AUTHZ_OUTCOME || '';
+          const labelAuthzDecision = process.env.LABEL_AUTHZ_DECISION || '';
+          const labelAuthzReason = process.env.LABEL_AUTHZ_REASON || '';
+          const labelAuthzDetails = process.env.LABEL_AUTHZ_DETAILS || '';
+          const labelAuthzTokenSource = process.env.LABEL_AUTHZ_TOKEN_SOURCE || 'unknown';
+          const labelApplied = '${{ steps.apply_label.outcome }}' === 'success';
           const forkOwner = '${{ steps.fork_owner.outputs.fork_owner }}';
           const forkOwnerType = '${{ steps.fork_owner.outputs.fork_owner_type }}';
 
@@ -591,9 +1010,12 @@ runs:
 
           const outcomes = [
             ['Consume bridge artifact', '${{ steps.bridge.outcome }}'],
+            ['Resolve configured trigger command', '${{ steps.resolve_trigger_command.outcome }}'],
             ['Check out BASE', '${{ steps.checkout_base.outcome }}'],
             ['Check out HEAD', '${{ steps.checkout_head.outcome }}'],
             ['Authorize commenter', '${{ steps.authorize_commenter.outcome }}'],
+            ['Authorize label command', '${{ steps.authorize_label_command.outcome }}'],
+            ['Apply configured label', '${{ steps.apply_label.outcome }}'],
             ['Stage file changes', '${{ steps.branch_and_copy.outcome }}'],
             ['Detect push_to_fork owner type', '${{ steps.fork_owner.outcome }}'],
             ['Validate create-pull-request inputs', '${{ steps.validate_cpr_inputs.outcome }}'],
@@ -618,6 +1040,18 @@ runs:
               'Ensure the source workflow uploaded the `workflow-data` artifact and this run was triggered from a `pull_request_review_comment` event.',
               'Check the run logs link below and re-run after posting a fresh review comment on a file line.',
             ];
+          } else if (triggerMode === 'invalid') {
+            title = 'Invalid label command configuration';
+            bodyIntro = triggerResolveError || 'I could not parse the configured `label_commands` input.';
+            adviceLines = [
+              'Fix the `label_commands` workflow input so it is valid YAML or JSON and each entry includes `command` (or `keyword`) plus `label`.',
+            ];
+          } else if (triggerMode === 'unknown') {
+            title = 'Unknown splice-bot command';
+            bodyIntro = triggerResolveError || `No configured splice-bot command matched \`${triggerKeyword}\`.`;
+            adviceLines = [
+              'Either remove the keyword to run the default split-PR flow, or add a matching entry to `label_commands`.',
+            ];
           } else if (authzOutcome === 'failure' || authzDecision === 'deny') {
             title = 'Not authorized to trigger splice-bot';
             bodyIntro = authzReason
@@ -626,6 +1060,32 @@ runs:
             adviceLines = [
               'If this should be allowed, update workflow inputs (`allow_pr_author`, `min_repo_permission`, `allowed_users`, `allowed_teams`) or adjust repository/team permissions.',
               'You can also re-run using an authorized commenter account.',
+            ];
+          } else if (triggerMode === 'label' && (labelAuthzOutcome === 'failure' || labelAuthzDecision === 'deny')) {
+            title = 'Not authorized to run label command';
+            bodyIntro = labelAuthzReason
+              ? labelAuthzReason
+              : `This review comment does not meet the permission requirement for label command \`${labelCommand}\`.`;
+            adviceLines = [
+              'Raise the triggering user permission level or lower the command-specific `min_repo_permission` in `label_commands` if that is intended.',
+            ];
+          } else if (triggerMode === 'label' && labelAuthzDecision === 'error') {
+            title = 'Label command authorization failed';
+            bodyIntro = labelAuthzReason || 'I could not complete the authorization check for this label command.';
+            adviceLines = [
+              'Verify the auth-check token has read access for collaborator permission lookups.',
+            ];
+          } else if (triggerMode === 'label' && labelApplied) {
+            title = 'Label applied';
+            bodyIntro = `Applied label **${labelName}** via splice-bot command \`${labelCommand}\`.`;
+            adviceLines = [];
+          } else if (triggerMode === 'label') {
+            title = 'Failed to apply label';
+            bodyIntro = labelName
+              ? `I couldn't apply label **${labelName}** for splice-bot command \`${labelCommand}\`.`
+              : "I couldn't apply the requested label.";
+            adviceLines = [
+              'Verify the workflow token can write labels on the pull request and that the target label exists or can be created by the token.',
             ];
           } else if (authzDecision === 'error') {
             title = 'Authorization check failed';
@@ -708,11 +1168,27 @@ runs:
               tokenDiagnostics.push(...detailLines);
             }
           }
+          if (labelAuthzDetails) {
+            const labelDetailLines = labelAuthzDetails
+              .split('\n')
+              .filter(Boolean)
+              .map((line) => `- label command auth: ${line}`);
+            if (labelDetailLines.length > 0) {
+              tokenDiagnostics.push(...labelDetailLines);
+            }
+          }
+          if (triggerKeyword) {
+            tokenDiagnostics.push(`- trigger keyword: \`${triggerKeyword}\``);
+          }
+          if (labelAuthzTokenSource && labelAuthzTokenSource !== 'unknown') {
+            tokenDiagnostics.push(`- label authz token source: \`${labelAuthzTokenSource}\``);
+          }
           const tokenDiagnosticsBlock = tokenDiagnostics.join('\n');
           const stepOutcomesDetails = `<details>\n<summary>Step outcomes</summary>\n\n${outcomeLines}\n</details>`;
           const successBody = `**${title}**\n\n${bodyIntro}`;
           const failureBody = `**${title}**\n\n${bodyIntro}${failedStepsLine}\n\nAdvice:\n${adviceBlock}\n\nToken diagnostics:\n${tokenDiagnosticsBlock}\n\nRun logs: ${runUrl}\n\n${stepOutcomesDetails}`;
-          const body = automatedPrNumber ? successBody : failureBody;
+          const wasSuccessful = Boolean(automatedPrNumber) || labelApplied;
+          const body = wasSuccessful ? successBody : failureBody;
 
           try {
             if (Number.isFinite(reviewCommentId) && reviewCommentId > 0) {
