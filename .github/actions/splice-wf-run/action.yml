@@ -10,7 +10,7 @@ inputs:
     required: false
     default: 'true'
   min_repo_permission:
-    description: Minimum repo permission allowed to trigger splice-bot (anyone, triage, write, maintain, admin)
+    description: Minimum repo permission allowed to trigger splice-bot (disabled, anyone, triage, write, maintain, admin)
     required: false
     default: 'anyone'
   allowed_teams:
@@ -194,7 +194,7 @@ runs:
             raise "label_commands[#{index}] is missing command/keyword." if keyword.empty?
             raise "label_commands[#{index}] is missing label." if label.empty?
             raise "label_commands[#{index}] has unsupported type '#{type}'." unless type == 'add-label'
-            raise "label_commands[#{index}] has invalid min_repo_permission '#{min_repo_permission}'." unless %w[anyone triage write maintain admin].include?(min_repo_permission)
+            raise "label_commands[#{index}] has invalid min_repo_permission '#{min_repo_permission}'." unless %w[disabled anyone triage write maintain admin].include?(min_repo_permission)
 
             {
               'command' => keyword,
@@ -279,10 +279,10 @@ runs:
 
           const allowedTeams = parseList(rawAllowedTeams);
           const allowedUsers = parseList(rawAllowedUsers);
-          const validMinPermissions = new Set(['anyone', 'triage', 'write', 'maintain', 'admin']);
+          const validMinPermissions = new Set(['disabled', 'anyone', 'triage', 'write', 'maintain', 'admin']);
           if (!validMinPermissions.has(minRepoPermission)) {
             failError(
-              `Invalid min_repo_permission '${minRepoPermission}'. Expected one of: anyone, triage, write, maintain, admin.`,
+              `Invalid min_repo_permission '${minRepoPermission}'. Expected one of: disabled, anyone, triage, write, maintain, admin.`,
               [
                 `commenter: ${commenterLogin || '(missing)'}`,
                 `base repo: ${baseRepo || '(missing)'}`,
@@ -321,6 +321,7 @@ runs:
             admin: 5,
           };
           const thresholdByPermission = {
+            disabled: null,
             anyone: null,
             triage: permissionRank.triage,
             write: permissionRank.write,
@@ -370,7 +371,11 @@ runs:
             return;
           }
 
-          if (minThreshold !== null) {
+          if (minRepoPermission === 'disabled') {
+            core.info('Repository permission authorization is disabled for this trigger policy.');
+          }
+
+          if (minRepoPermission !== 'disabled' && minThreshold !== null) {
             try {
               const { data } = await github.rest.repos.getCollaboratorPermissionLevel({
                 owner,
@@ -570,6 +575,7 @@ runs:
             admin: 5,
           };
           const thresholdByPermission = {
+            disabled: null,
             anyone: null,
             triage: permissionRank.triage,
             write: permissionRank.write,
@@ -578,7 +584,7 @@ runs:
           };
           if (!(minRepoPermission in thresholdByPermission)) {
             fail(
-              `Invalid label command min_repo_permission '${minRepoPermission}'. Expected one of: anyone, triage, write, maintain, admin.`,
+              `Invalid label command min_repo_permission '${minRepoPermission}'. Expected one of: disabled, anyone, triage, write, maintain, admin.`,
               `label command: ${labelCommand}`
             );
             return;
@@ -622,7 +628,11 @@ runs:
             return;
           }
 
-          if (minThreshold !== null) {
+          if (minRepoPermission === 'disabled') {
+            core.info(`Repository permission authorization is disabled for label command '${labelCommand}'.`);
+          }
+
+          if (minRepoPermission !== 'disabled' && minThreshold !== null) {
             try {
               const { data } = await github.rest.repos.getCollaboratorPermissionLevel({
                 owner,

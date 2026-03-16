@@ -141,7 +141,7 @@ Each command object supports:
 
 - `command` or `keyword`: the token immediately after `splice-bot`
 - `label`: the label name to apply to the PR
-- `min_repo_permission`: optional command-specific permission floor; one of `anyone`, `triage`, `write`, `maintain`, `admin` and defaults to `write`
+- `min_repo_permission`: optional command-specific permission floor; one of `disabled`, `anyone`, `triage`, `write`, `maintain`, `admin` and defaults to `write`
 - `allowed_users`: optional command-specific user allowlist
 - `allowed_teams`: optional command-specific team allowlist
 
@@ -254,12 +254,13 @@ A commenter is authorized if **any** configured rule matches:
 
 1. PR author and `allow_pr_author: true`
 2. Commenter in `allowed_users`
-3. Commenter meets `min_repo_permission` (`anyone`, `triage`, `write`, `maintain`, `admin`)
+3. Commenter meets `min_repo_permission` (`disabled`, `anyone`, `triage`, `write`, `maintain`, `admin`)
 4. Commenter is an active member of one of `allowed_teams`
 
 Notes:
 
 - `min_repo_permission: anyone` preserves open trigger behavior.
+- `min_repo_permission: disabled` turns off repo-permission authorization entirely, so only PR-author, user allowlist, and team allowlist rules can authorize.
 - Team checks require org-owned repositories and readable team metadata.
 - Authorization checks are fail-closed: lookup/config errors stop execution.
 - Label commands may also enforce a stricter per-command `min_repo_permission`.
@@ -271,7 +272,7 @@ Notes:
 | Token role | Used for | Resolution / fallback order | Required permissions (GitHub App / fine-grained PAT) | Classic PAT scopes | Install target |
 | ---------- | -------- | --------------------------- | ----------------------------------------------------- | ------------------ | -------------- |
 | `token` | Artifact download, checkout, PR create/update, callback comments, PR labels; also branch push when it is the effective push token | `token` -> `github.token` | Baseline: `Actions: Read`, `Pull requests: Read & write`, `Contents: Read`; add `Issues: Read & write` when using `label_commands`; require `Contents: Read & write` when `token` performs branch push (non-fork mode, or fork mode when `branch_token` falls back to `token`) | `repo` (private repos), `public_repo` (public-only repos) | Base repository (and fork too if this token is used as branch fallback) |
-| `authz_token` | Authorization checks (`min_repo_permission`, `allowed_teams`, command-level label auth) | `authz_token` -> `token` -> `github.token` | Repo-permission checks: `Metadata: Read` (repo). Team checks: `Members: Read` (org). | `read:org` for org/team checks; plus `repo` for private repository collaborator checks (`public_repo` for public-only repos) | Base repo/org metadata context |
+| `authz_token` | Authorization checks (`min_repo_permission`, `allowed_teams`, command-level label auth) | `authz_token` -> `token` -> `github.token` | Repo-permission checks: `Metadata: Read` (repo) when repo-permission authorization is enabled. Team checks: `Members: Read` (org). | `read:org` for org/team checks; plus `repo` for private repository collaborator checks (`public_repo` for public-only repos) | Base repo/org metadata context |
 | `branch_token` | Push PR branch in `push_to_fork` mode | `branch_token` -> `token` -> `github.token` | `Contents: Read & write`; often `Workflows: Read & write` if pushed commits include `.github/workflows/*` changes | `repo` (private forks), `public_repo` (public-only forks) | Fork repository |
 
 Additional caveats:
@@ -309,10 +310,10 @@ Permission mapping references:
 | ---- | ---- | -------- | ------- | ----------- |
 | `source_workflow` | string | Yes | - | Name of the source workflow that emitted the bridge artifact. |
 | `allow_pr_author` | boolean | No | `true` | Always allow PR author to trigger. |
-| `min_repo_permission` | string | No | `anyone` | Minimum permission threshold: `anyone`, `triage`, `write`, `maintain`, `admin`. |
+| `min_repo_permission` | string | No | `anyone` | Minimum permission threshold: `disabled`, `anyone`, `triage`, `write`, `maintain`, `admin`. |
 | `allowed_teams` | string | No | `''` | Comma/newline-separated team allowlist (`team-slug` or `org/team-slug`). |
 | `allowed_users` | string | No | `''` | Comma/newline-separated GitHub login allowlist. |
-| `label_commands` | string | No | `''` | YAML or JSON array of label-command objects (`command`/`keyword`, `label`, optional `min_repo_permission`, `allowed_users`, `allowed_teams`). |
+| `label_commands` | string | No | `''` | YAML or JSON array of label-command objects (`command`/`keyword`, `label`, optional `min_repo_permission`, `allowed_users`, `allowed_teams`). `min_repo_permission: disabled` means command authorization relies only on the command-level allowlists. |
 | `push_to_fork` | string | No | `''` | Optional fork destination (`owner/repo`) for PR branches. |
 | `maintainer_can_modify` | string | No | `''` | Optional fork-mode override (`"true"`/`"false"`). |
 | `token` | string | No | `''` | Main API token for artifact download, checkout, and PR operations. Falls back to `github.token`. |
