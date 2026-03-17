@@ -1,0 +1,51 @@
+name: Splice Action Act Harness
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  invalid-min-repo-permission:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Run invalid permission case
+        id: invalid_permission
+        continue-on-error: true
+        uses: ./.github/actions/splice-wf-run
+        with:
+          source_workflow: act-harness
+          min_repo_permission: bogus
+          bridge_override_json: >-
+            {"file_path":"src/Foo.lean","commenter_login":"reviewer","pr_author_login":"author","base_ref":"master","base_repo":"leanprover-community/SpliceBot","head_repo":"leanprover-community/SpliceBot","head_sha":"1111111111111111111111111111111111111111","head_ref":"feature","head_label":"author:feature","committer":"github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>","author":"author <12345+author@users.noreply.github.com>"}
+
+      - name: Assert invalid permission failed
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ "${{ steps.invalid_permission.outcome }}" = "failure" ]
+
+  missing-bridge-data:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Run missing bridge data case
+        id: missing_bridge
+        continue-on-error: true
+        uses: ./.github/actions/splice-wf-run
+        with:
+          source_workflow: act-harness
+          bridge_override_json: >-
+            {"file_path":"src/Foo.lean","commenter_login":"reviewer","base_ref":"master","base_repo":"leanprover-community/SpliceBot","head_repo":"leanprover-community/SpliceBot","head_sha":"1111111111111111111111111111111111111111","head_ref":"feature","head_label":"author:feature","committer":"github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>","author":"author <12345+author@users.noreply.github.com>"}
+
+      - name: Assert missing bridge data failed
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ "${{ steps.missing_bridge.outcome }}" = "failure" ]
+

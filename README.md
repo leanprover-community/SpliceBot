@@ -126,11 +126,22 @@ jobs:
 
 You can run the lightweight workflow smoke tests locally with [`act`](https://github.com/nektos/act).
 These tests exercise the reusable trigger workflow against canned review-comment payloads and intentionally skip bridge-artifact emission.
+The composite-action smoke harness uses the internal test-only `bridge_override_json` input; that input exists only for local/CI testing and is not part of the supported public API.
 
 Prerequisites:
 
 - `act` installed locally
 - Docker running
+
+Run all local `act` smoke tests:
+
+```bash
+tests/actions/run_act_smoke.sh
+```
+
+That script auto-discovers all reusable-workflow event fixtures under `tests/actions/events/` and then runs the composite-action smoke harness.
+
+You can also run individual harnesses directly.
 
 Example commands:
 
@@ -150,6 +161,8 @@ act \
 
 The canned event payloads live under `tests/actions/events/`.
 The CI workflow that runs the same smoke harness is `.github/workflows/act_smoke.yaml`.
+The reusable trigger harness lives at `tests/actions/workflows/splice_harness.yaml`.
+There is also a composite-action harness at `tests/actions/workflows/splice_action_harness.yaml` for deterministic non-network failure cases.
 
 ## GitHub App token minting in caller job
 
@@ -267,6 +280,7 @@ Permission mapping references:
 | Name | Type | Required | Default | Description |
 | ---- | ---- | -------- | ------- | ----------- |
 | `source_workflow` | string | Yes | - | Name of the source workflow that emitted the bridge artifact. |
+| `bridge_override_json` | string | No | `''` | Internal test-only override used by the local/CI `act` harness instead of consuming the bridge artifact. Do not rely on this in normal workflow usage; it is not part of the supported public API. |
 | `allow_pr_author` | boolean | No | `true` | Always allow PR author to trigger. |
 | `min_repo_permission` | string | No | `anyone` | Minimum permission threshold: `anyone`, `triage`, `write`. |
 | `allowed_teams` | string | No | `''` | Comma/newline-separated team allowlist (`team-slug` or `org/team-slug`). |
@@ -278,6 +292,7 @@ Permission mapping references:
 | `branch_token` | string | No | `''` | Optional branch push token for `push_to_fork` mode. Falls back to `token`, then `github.token`, but fork mode should use an explicit token with write access to the fork. |
 
 Sensitive values should be passed through action inputs using workflow secrets when you do not want to rely on `github.token`, for example `token: ${{ secrets.SPLICE_BOT_TOKEN }}`.
+Test-only internal inputs such as `bridge_override_json` are intentionally undocumented outside the local test harness context and may change without notice.
 
 ## Sensitive `splice-wf-run` action inputs
 
