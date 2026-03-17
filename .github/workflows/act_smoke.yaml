@@ -1,0 +1,62 @@
+name: Act Smoke Tests
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/*.yml"
+      - ".github/workflows/*.yaml"
+      - ".github/actions/**/*.yml"
+      - ".github/actions/**/*.yaml"
+      - "tests/actions/**"
+  workflow_dispatch:
+
+jobs:
+  act-smoke:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - scenario: no-trigger
+            event_file: tests/actions/events/pr-review-comment-no-trigger.json
+            expected_marker: "No `splice-bot` found at the start of a line, skipping."
+          - scenario: basic-trigger
+            event_file: tests/actions/events/pr-review-comment-basic.json
+            expected_marker: "Trigger keyword: (none)"
+          - scenario: keyword-trigger
+            event_file: tests/actions/events/pr-review-comment-keyword.json
+            expected_marker: "Trigger keyword: ready"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install act
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --silent --show-error --location \
+            https://raw.githubusercontent.com/nektos/act/master/install.sh \
+            | sudo bash -s -- -b /usr/local/bin
+
+      - name: Run act scenario
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/act-logs"
+          act \
+            --workflows tests/actions/workflows/splice_harness.yaml \
+            --eventpath "${{ matrix.event_file }}" \
+            --container-architecture linux/amd64 \
+            --platform ubuntu-latest=catthehacker/ubuntu:act-latest \
+            pull_request_review_comment \
+            > "$RUNNER_TEMP/act-logs/${{ matrix.scenario }}.log" 2>&1
+
+      - name: Assert expected log marker
+        shell: bash
+        run: |
+          set -euo pipefail
+          tests/actions/assert/log_contains.sh \
+            "$RUNNER_TEMP/act-logs/${{ matrix.scenario }}.log" \
+            "${{ matrix.expected_marker }}"
+

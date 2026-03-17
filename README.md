@@ -122,6 +122,35 @@ jobs:
           # branch_token: ${{ secrets.SPLICE_BOT_FORK_TOKEN }}
 ```
 
+## Local `act` smoke tests
+
+You can run the lightweight workflow smoke tests locally with [`act`](https://github.com/nektos/act).
+These tests exercise the reusable trigger workflow against canned review-comment payloads and intentionally skip bridge-artifact emission.
+
+Prerequisites:
+
+- `act` installed locally
+- Docker running
+
+Example commands:
+
+```bash
+act \
+  --workflows tests/actions/workflows/splice_harness.yaml \
+  --eventpath tests/actions/events/pr-review-comment-basic.json \
+  pull_request_review_comment
+```
+
+```bash
+act \
+  --workflows tests/actions/workflows/splice_harness.yaml \
+  --eventpath tests/actions/events/pr-review-comment-keyword.json \
+  pull_request_review_comment
+```
+
+The canned event payloads live under `tests/actions/events/`.
+The CI workflow that runs the same smoke harness is `.github/workflows/act_smoke.yaml`.
+
 ## GitHub App token minting in caller job
 
 ```yaml

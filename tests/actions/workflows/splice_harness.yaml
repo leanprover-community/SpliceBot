@@ -1,0 +1,17 @@
+name: Splice Act Harness
+
+on:
+  pull_request_review_comment:
+    types:
+      - created
+      - edited
+
+permissions: {}
+
+jobs:
+  run-reusable:
+    uses: ./.github/workflows/splice.yaml
+    with:
+      base_ref: master
+      emit_bridge_artifact: false
+
