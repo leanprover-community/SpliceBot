@@ -1,0 +1,29 @@
+{
+  "comment": {
+    "body": "splice-bot",
+    "id": 108,
+    "path": "src/Foo.lean",
+    "user": {
+      "login": "reviewer"
+    }
+  },
+  "pull_request": {
+    "number": 49,
+    "user": {
+      "login": "author",
+      "id": 12345
+    },
+    "base": {
+      "repo": {
+        "full_name": "leanprover-community/SpliceBot"
+      }
+    },
+    "head": {
+      "ref": "feature-branch",
+      "label": "author:feature-branch",
+      "repo": {
+        "full_name": "leanprover-community/SpliceBot"
+      }
+    }
+  }
+}

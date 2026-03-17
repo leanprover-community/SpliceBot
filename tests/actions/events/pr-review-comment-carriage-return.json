@@ -1,0 +1,31 @@
+{
+  "comment": {
+    "body": "Please split this.\r\n\r\nsplice-bot\r\n",
+    "id": 109,
+    "path": "src/Foo.lean",
+    "user": {
+      "login": "reviewer"
+    }
+  },
+  "pull_request": {
+    "number": 50,
+    "user": {
+      "login": "author",
+      "id": 12345
+    },
+    "base": {
+      "sha": "ffffffffffffffffffffffffffffffffffffffff",
+      "repo": {
+        "full_name": "leanprover-community/SpliceBot"
+      }
+    },
+    "head": {
+      "sha": "1212121212121212121212121212121212121212",
+      "ref": "feature-branch",
+      "label": "author:feature-branch",
+      "repo": {
+        "full_name": "leanprover-community/SpliceBot"
+      }
+    }
+  }
+}

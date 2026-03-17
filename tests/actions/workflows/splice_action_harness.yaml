@@ -6,6 +6,27 @@ on:
 permissions: {}
 
 jobs:
+  invalid-bridge-override-json:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Run invalid bridge override case
+        id: invalid_bridge_override
+        continue-on-error: true
+        uses: ./.github/actions/splice-wf-run
+        with:
+          source_workflow: act-harness
+          bridge_override_json: >-
+            ["not","an","object"]
+
+      - name: Assert invalid bridge override failed
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ "${{ steps.invalid_bridge_override.outcome }}" = "failure" ]
+
   invalid-min-repo-permission:
     runs-on: ubuntu-latest
     steps:
@@ -28,6 +49,27 @@ jobs:
           set -euo pipefail
           [ "${{ steps.invalid_permission.outcome }}" = "failure" ]
 
+  invalid-base-repo-format:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Run invalid base repo format case
+        id: invalid_base_repo
+        continue-on-error: true
+        uses: ./.github/actions/splice-wf-run
+        with:
+          source_workflow: act-harness
+          bridge_override_json: >-
+            {"file_path":"src/Foo.lean","commenter_login":"reviewer","pr_author_login":"author","base_ref":"master","base_repo":"not-a-repo","head_repo":"leanprover-community/SpliceBot","head_sha":"1111111111111111111111111111111111111111","head_ref":"feature","head_label":"author:feature","committer":"github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>","author":"author <12345+author@users.noreply.github.com>"}
+
+      - name: Assert invalid base repo format failed
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ "${{ steps.invalid_base_repo.outcome }}" = "failure" ]
+
   missing-bridge-data:
     runs-on: ubuntu-latest
     steps:
@@ -49,3 +91,46 @@ jobs:
           set -euo pipefail
           [ "${{ steps.missing_bridge.outcome }}" = "failure" ]
 
+  authorized-pr-author-then-checkout-fails:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Run pr-author authorization success case
+        id: pr_author_checkout_failure
+        continue-on-error: true
+        uses: ./.github/actions/splice-wf-run
+        with:
+          source_workflow: act-harness
+          allow_pr_author: 'true'
+          bridge_override_json: >-
+            {"file_path":"src/Foo.lean","commenter_login":"author","pr_author_login":"author","pr_number":"1","review_comment_id":"1","base_ref":"master","base_repo":"example/definitely-does-not-exist","head_repo":"example/definitely-does-not-exist","head_sha":"1111111111111111111111111111111111111111","head_ref":"feature","head_label":"author:feature","committer":"github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>","author":"author <12345+author@users.noreply.github.com>"}
+
+      - name: Assert pr-author auth succeeded before later failure
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ "${{ steps.pr_author_checkout_failure.outcome }}" = "failure" ]
+
+  allowed-user-then-checkout-fails:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Run allowed user authorization success case
+        id: allowed_user_checkout_failure
+        continue-on-error: true
+        uses: ./.github/actions/splice-wf-run
+        with:
+          source_workflow: act-harness
+          allowed_users: reviewer
+          bridge_override_json: >-
+            {"file_path":"src/Foo.lean","commenter_login":"reviewer","pr_author_login":"author","pr_number":"1","review_comment_id":"1","base_ref":"master","base_repo":"example/definitely-does-not-exist","head_repo":"example/definitely-does-not-exist","head_sha":"1111111111111111111111111111111111111111","head_ref":"feature","head_label":"author:feature","committer":"github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>","author":"author <12345+author@users.noreply.github.com>"}
+
+      - name: Assert allowed user auth succeeded before later failure
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ "${{ steps.allowed_user_checkout_failure.outcome }}" = "failure" ]
