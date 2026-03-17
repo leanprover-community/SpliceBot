@@ -132,6 +132,8 @@ Prerequisites:
 
 - `act` installed locally
 - Docker running
+- `GITHUB_TOKEN` available if the workflow under test needs it, for example:
+  `export GITHUB_TOKEN="$(gh auth token)"`
 
 Run all local `act` smoke tests:
 
@@ -140,6 +142,7 @@ tests/actions/run_act_smoke.sh
 ```
 
 That script auto-discovers all reusable-workflow event fixtures under `tests/actions/events/` and then runs the composite-action smoke harness.
+If `GITHUB_TOKEN` is set in the environment, the script passes it through to `act` as a secret.
 
 You can also run individual harnesses directly.
 

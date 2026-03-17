@@ -29,6 +29,7 @@ jobs:
         shell: bash
         env:
           DOCKER_AUTH_CONFIG: '{}'
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           tests/actions/run_act_smoke.sh

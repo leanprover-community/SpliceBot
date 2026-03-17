@@ -11,6 +11,11 @@ common_args=(
   --platform ubuntu-latest=catthehacker/ubuntu:act-latest
   --no-cache-server
 )
+secret_args=()
+
+if [ -n "${GITHUB_TOKEN:-}" ]; then
+  secret_args+=(--secret GITHUB_TOKEN)
+fi
 
 reusable_events=()
 while IFS= read -r event_file; do
@@ -54,11 +59,17 @@ for event_file in "${reusable_events[@]}"; do
 
   log_file="${tmp_dir}/$(basename "${event_file%.json}").log"
   echo "==> Running reusable workflow smoke case: ${event_file}"
-  run_act_with_log "$log_file" act \
-    --workflows tests/actions/workflows/splice_harness.yaml \
-    --eventpath "$event_file" \
-    "${common_args[@]}" \
-    pull_request_review_comment
+  act_args=(
+    act
+    --workflows tests/actions/workflows/splice_harness.yaml
+    --eventpath "$event_file"
+    "${common_args[@]}"
+  )
+  if [ -n "${GITHUB_TOKEN:-}" ]; then
+    act_args+=(--secret GITHUB_TOKEN)
+  fi
+  act_args+=(pull_request_review_comment)
+  run_act_with_log "$log_file" "${act_args[@]}"
 
   while IFS= read -r expected_marker || [ -n "$expected_marker" ]; do
     [ -z "$expected_marker" ] && continue
@@ -74,7 +85,13 @@ done
 
 echo "==> Running composite action smoke harness"
 composite_log_file="${tmp_dir}/splice_action_harness.log"
-run_act_with_log "$composite_log_file" act \
-  --workflows tests/actions/workflows/splice_action_harness.yaml \
-  "${common_args[@]}" \
-  workflow_dispatch
+act_args=(
+  act
+  --workflows tests/actions/workflows/splice_action_harness.yaml
+  "${common_args[@]}"
+)
+if [ -n "${GITHUB_TOKEN:-}" ]; then
+  act_args+=(--secret GITHUB_TOKEN)
+fi
+act_args+=(workflow_dispatch)
+run_act_with_log "$composite_log_file" "${act_args[@]}"
