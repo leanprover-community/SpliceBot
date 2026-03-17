@@ -27,6 +27,8 @@ jobs:
 
       - name: Run act smoke suite
         shell: bash
+        env:
+          DOCKER_AUTH_CONFIG: '{}'
         run: |
           set -euo pipefail
           tests/actions/run_act_smoke.sh
