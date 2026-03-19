@@ -1,0 +1,30 @@
+{
+  "comment": {
+    "body": "splice-bot",
+    "id": 105,
+    "user": {
+      "login": "reviewer"
+    }
+  },
+  "pull_request": {
+    "number": 46,
+    "user": {
+      "login": "author",
+      "id": 12345
+    },
+    "base": {
+      "sha": "9999999999999999999999999999999999999999",
+      "repo": {
+        "full_name": "leanprover-community/SpliceBot"
+      }
+    },
+    "head": {
+      "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "ref": "feature-branch",
+      "label": "author:feature-branch",
+      "repo": {
+        "full_name": "leanprover-community/SpliceBot"
+      }
+    }
+  }
+}

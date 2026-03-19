@@ -5,6 +5,10 @@ inputs:
   source_workflow:
     description: Name of the source workflow that emitted the bridge artifact
     required: true
+  bridge_override_json:
+    description: Internal test-only JSON object used instead of consuming the bridge artifact; not part of the supported public API
+    required: false
+    default: ''
   allow_pr_author:
     description: Whether to always allow the PR author to trigger splice-bot
     required: false
@@ -90,7 +94,8 @@ runs:
         echo "branch-token source: ${{ steps.token_mode.outputs.branch_token_source }}"
 
     - name: Consume bridge artifact
-      id: bridge
+      if: inputs.bridge_override_json == ''
+      id: bridge_consume
       uses: leanprover-community/privilege-escalation-bridge/consume@v1
       with:
         token: ${{ inputs.token || github.token }}
@@ -112,6 +117,88 @@ runs:
           head_label=event.pull_request.head.label
           committer=outputs.committer
           author=outputs.author
+
+    - name: Load bridge override
+      if: inputs.bridge_override_json != ''
+      id: bridge_override
+      shell: bash
+      env:
+        BRIDGE_OVERRIDE_JSON: ${{ inputs.bridge_override_json }}
+      run: |
+        set -euo pipefail
+
+        ruby <<'RUBY'
+        require 'json'
+
+        raw = ENV.fetch('BRIDGE_OVERRIDE_JSON', '')
+        output_path = ENV.fetch('GITHUB_OUTPUT')
+        data = JSON.parse(raw)
+
+        unless data.is_a?(Hash)
+          warn 'bridge_override_json must be a JSON object.'
+          exit 1
+        end
+
+        keys = %w[
+          pr_number
+          review_comment_id
+          file_path
+          commenter_login
+          pr_author_login
+          base_ref
+          base_repo
+          head_repo
+          head_sha
+          head_ref
+          head_label
+          committer
+          author
+        ]
+
+        File.open(output_path, 'a') do |f|
+          keys.each do |key|
+            value = data[key]
+            next if value.nil?
+            f.puts("#{key}=#{value}")
+          end
+        end
+        RUBY
+
+    - name: Resolve bridge data
+      id: bridge
+      shell: bash
+      env:
+        PR_NUMBER: ${{ steps.bridge_override.outputs.pr_number || steps.bridge_consume.outputs.pr_number }}
+        REVIEW_COMMENT_ID: ${{ steps.bridge_override.outputs.review_comment_id || steps.bridge_consume.outputs.review_comment_id }}
+        FILE_PATH: ${{ steps.bridge_override.outputs.file_path || steps.bridge_consume.outputs.file_path }}
+        COMMENTER_LOGIN: ${{ steps.bridge_override.outputs.commenter_login || steps.bridge_consume.outputs.commenter_login }}
+        PR_AUTHOR_LOGIN: ${{ steps.bridge_override.outputs.pr_author_login || steps.bridge_consume.outputs.pr_author_login }}
+        BASE_REF: ${{ steps.bridge_override.outputs.base_ref || steps.bridge_consume.outputs.base_ref }}
+        BASE_REPO: ${{ steps.bridge_override.outputs.base_repo || steps.bridge_consume.outputs.base_repo }}
+        HEAD_REPO: ${{ steps.bridge_override.outputs.head_repo || steps.bridge_consume.outputs.head_repo }}
+        HEAD_SHA: ${{ steps.bridge_override.outputs.head_sha || steps.bridge_consume.outputs.head_sha }}
+        HEAD_REF: ${{ steps.bridge_override.outputs.head_ref || steps.bridge_consume.outputs.head_ref }}
+        HEAD_LABEL: ${{ steps.bridge_override.outputs.head_label || steps.bridge_consume.outputs.head_label }}
+        COMMITTER: ${{ steps.bridge_override.outputs.committer || steps.bridge_consume.outputs.committer }}
+        AUTHOR: ${{ steps.bridge_override.outputs.author || steps.bridge_consume.outputs.author }}
+      run: |
+        set -euo pipefail
+
+        {
+          echo "pr_number=${PR_NUMBER}"
+          echo "review_comment_id=${REVIEW_COMMENT_ID}"
+          echo "file_path=${FILE_PATH}"
+          echo "commenter_login=${COMMENTER_LOGIN}"
+          echo "pr_author_login=${PR_AUTHOR_LOGIN}"
+          echo "base_ref=${BASE_REF}"
+          echo "base_repo=${BASE_REPO}"
+          echo "head_repo=${HEAD_REPO}"
+          echo "head_sha=${HEAD_SHA}"
+          echo "head_ref=${HEAD_REF}"
+          echo "head_label=${HEAD_LABEL}"
+          echo "committer=${COMMITTER}"
+          echo "author=${AUTHOR}"
+        } >> "$GITHUB_OUTPUT"
 
     - name: Authorize commenter
       if: steps.bridge.outputs.file_path != ''

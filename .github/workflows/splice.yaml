@@ -22,6 +22,11 @@ on:
         required: false
         type: string
         default: '${{ github.event.pull_request.user.login }} <${{ github.event.pull_request.user.id }}+${{ github.event.pull_request.user.login }}@users.noreply.github.com>'
+      emit_bridge_artifact:
+        description: Whether to emit the bridge artifact; useful to disable in local smoke tests
+        required: false
+        type: boolean
+        default: true
 
 permissions: {}
 
@@ -33,6 +38,7 @@ jobs:
       - name: Verify caller event is pull_request_review_comment
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         with:
+          github-token: ${{ github.token }}
           script: |
             const eventName = context.eventName;
             const hasReviewCommentPayload = !!(context.payload?.comment && context.payload?.pull_request);
@@ -53,20 +59,27 @@ jobs:
           # Pass the reusable input down to the script and emit it as an output named base_ref
           BASE_REF_INPUT: ${{ inputs.base_ref }}
         with:
+          github-token: ${{ github.token }}
           script: |
             // NOTE: In actions/github-script, `core`, `github`, and `context` are provided globally.
             const comment = context.payload?.comment;
             const pr = context.payload?.pull_request;
             const body = comment?.body || "";
+            const triggerLine = body
+              .split(/\r?\n/)
+              .find((line) => /^splice-bot\b/i.test(line));
 
             core.info(`Comment body:\n---\n${body}\n---`);
 
             // Start-of-line match across lines; no leading whitespace allowed
-            if (!/^splice-bot\b/im.test(body)) {
+            if (!triggerLine) {
               core.info("No `splice-bot` found at the start of a line, skipping.");
               core.setOutput("skip", "true");
               return;
             }
+
+            const triggerKeyword = triggerLine.replace(/^splice-bot\b/i, "").trim().split(/\s+/)[0] || "";
+            core.info(`Trigger keyword: ${triggerKeyword || "(none)"}`);
 
             const path = comment?.path;
             if (!path) {
@@ -106,21 +119,24 @@ jobs:
             core.setOutput("skip", "false");
             // IMPORTANT: base_ref now comes from the reusable workflow input (default master)
             core.setOutput("base_ref", baseRefFromInput);
+            core.setOutput("trigger_keyword", triggerKeyword);
 
-      - if: ${{ steps.extract.outputs.skip != 'true' }}
+      - if: ${{ steps.extract.outputs.skip != 'true' && inputs.emit_bridge_artifact }}
         name: Prepare bridge outputs
         run: |
           jq -n \
             --arg base_ref "${{ steps.extract.outputs.base_ref }}" \
+            --arg trigger_keyword "${{ steps.extract.outputs.trigger_keyword }}" \
             --arg committer "${{ inputs.committer }}" \
             --arg author "${{ inputs.author }}" \
             '{
               base_ref: $base_ref,
+              trigger_keyword: $trigger_keyword,
               committer: $committer,
               author: $author,
             }' > bridge-outputs.json
 
-      - if: ${{ steps.extract.outputs.skip != 'true' }}
+      - if: ${{ steps.extract.outputs.skip != 'true' && inputs.emit_bridge_artifact }}
         name: Emit bridge artifact
         uses: leanprover-community/privilege-escalation-bridge/emit@v1
         with:
