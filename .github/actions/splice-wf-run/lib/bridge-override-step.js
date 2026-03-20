@@ -36,7 +36,9 @@ function buildBridgeOverrideOutputLines(data) {
   for (const key of BRIDGE_OVERRIDE_KEYS) {
     const value = data[key];
     if (value === undefined || value === null) continue;
-    lines.push(`${key}=${String(value)}`);
+    lines.push(`${key}<<__SPLICEBOT_OUTPUT__`);
+    lines.push(String(value));
+    lines.push('__SPLICEBOT_OUTPUT__');
   }
   return lines;
 }

@@ -53,6 +53,7 @@ runs:
       id: token_mode
       shell: bash
       env:
+        INPUT_TOKEN: ${{ inputs.token }}
         PUSH_TO_FORK: ${{ inputs.push_to_fork }}
         AUTHZ_TOKEN: ${{ inputs.authz_token }}
         BRANCH_TOKEN: ${{ inputs.branch_token }}
@@ -63,7 +64,7 @@ runs:
         authz_token_source=github.token
         branch_token_source=not-applicable
 
-        if [ -n "${{ inputs.token }}" ]; then
+        if [ -n "${INPUT_TOKEN}" ]; then
           token_source=inputs.token
           authz_token_source=inputs.token
         fi
@@ -75,7 +76,7 @@ runs:
         if [ -n "${PUSH_TO_FORK}" ]; then
           if [ -n "${BRANCH_TOKEN}" ]; then
             branch_token_source=inputs.branch_token
-          elif [ -n "${{ inputs.token }}" ]; then
+          elif [ -n "${INPUT_TOKEN}" ]; then
             branch_token_source=inputs.token
           else
             branch_token_source=github.token
@@ -148,21 +149,29 @@ runs:
       run: |
         set -euo pipefail
 
-        {
-          echo "pr_number=${PR_NUMBER}"
-          echo "review_comment_id=${REVIEW_COMMENT_ID}"
-          echo "file_path=${FILE_PATH}"
-          echo "commenter_login=${COMMENTER_LOGIN}"
-          echo "pr_author_login=${PR_AUTHOR_LOGIN}"
-          echo "base_ref=${BASE_REF}"
-          echo "base_repo=${BASE_REPO}"
-          echo "head_repo=${HEAD_REPO}"
-          echo "head_sha=${HEAD_SHA}"
-          echo "head_ref=${HEAD_REF}"
-          echo "head_label=${HEAD_LABEL}"
-          echo "committer=${COMMITTER}"
-          echo "author=${AUTHOR}"
-        } >> "$GITHUB_OUTPUT"
+        write_output() {
+          local key="$1"
+          local value="$2"
+          {
+            echo "${key}<<__SPLICEBOT_OUTPUT__"
+            printf '%s\n' "${value}"
+            echo "__SPLICEBOT_OUTPUT__"
+          } >> "$GITHUB_OUTPUT"
+        }
+
+        write_output pr_number "${PR_NUMBER}"
+        write_output review_comment_id "${REVIEW_COMMENT_ID}"
+        write_output file_path "${FILE_PATH}"
+        write_output commenter_login "${COMMENTER_LOGIN}"
+        write_output pr_author_login "${PR_AUTHOR_LOGIN}"
+        write_output base_ref "${BASE_REF}"
+        write_output base_repo "${BASE_REPO}"
+        write_output head_repo "${HEAD_REPO}"
+        write_output head_sha "${HEAD_SHA}"
+        write_output head_ref "${HEAD_REF}"
+        write_output head_label "${HEAD_LABEL}"
+        write_output committer "${COMMITTER}"
+        write_output author "${AUTHOR}"
 
     - name: Authorize commenter
       if: steps.bridge.outputs.file_path != ''
@@ -210,13 +219,13 @@ runs:
       if: steps.bridge.outputs.file_path != ''
       id: branch_and_copy
       shell: bash
+      env:
+        FILE_PATH: ${{ steps.bridge.outputs.file_path }}
+        PR_NUMBER: ${{ steps.bridge.outputs.pr_number }}
+        BASE_REF: ${{ steps.bridge.outputs.base_ref }}
+        HEAD_SHA: ${{ steps.bridge.outputs.head_sha }}
       run: |
         set -euo pipefail
-
-        FILE_PATH="${{ steps.bridge.outputs.file_path }}"
-        PR_NUMBER="${{ steps.bridge.outputs.pr_number }}"
-        BASE_REF="${{ steps.bridge.outputs.base_ref }}"
-        HEAD_SHA="${{ steps.bridge.outputs.head_sha }}"
 
         # Build a bounded, ref-safe slug from the file path.
         FILE_SLUG="$(printf '%s' "${FILE_PATH}" \
