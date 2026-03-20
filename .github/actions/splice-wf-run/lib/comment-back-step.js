@@ -12,7 +12,6 @@ function collectStepOutcomes(env = process.env) {
     ['Stage file changes', env.BRANCH_AND_COPY_OUTCOME || ''],
     ['Validate create-pull-request inputs', env.VALIDATE_CPR_INPUTS_OUTCOME || ''],
     ['Create Pull Request', env.CPR_OUTCOME || ''],
-    ['Apply configured label', env.APPLY_LABEL_OUTCOME || ''],
   ];
 }
 
@@ -47,7 +46,6 @@ module.exports = async function runCommentBackStep({ core, github, env = process
     labelAuthzReason: env.LABEL_AUTHZ_REASON || '',
     labelAuthzDetails: env.LABEL_AUTHZ_DETAILS || '',
     labelAuthzTokenSource: env.LABEL_AUTHZ_TOKEN_SOURCE || authzTokenSource,
-    labelApplied: env.LABEL_APPLIED === 'true',
     forkOwner: env.FORK_OWNER || '',
     forkOwnerType: env.FORK_OWNER_TYPE || '',
     outcomes: collectStepOutcomes(env),

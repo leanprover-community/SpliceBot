@@ -91,52 +91,12 @@ test('buildCallbackCommentPayload reports split PR creation and label applicatio
     labelAuthzReason: '',
     labelAuthzDetails: '',
     labelAuthzTokenSource: 'inputs.authz_token',
-    labelApplied: true,
     forkOwner: '',
     forkOwnerType: '',
-    outcomes: [['Create Pull Request', 'success'], ['Apply configured label', 'success']],
+    outcomes: [['Create Pull Request', 'success']],
   });
 
   assert.match(payload.body, /\*\*Split PR created and labeled\*\*/);
   assert.match(payload.body, /#99/);
   assert.match(payload.body, /ready-to-merge/);
-});
-
-test('buildCallbackCommentPayload reports label failure after split PR creation', () => {
-  const payload = buildCallbackCommentPayload({
-    originalPrNumber: 42,
-    reviewCommentId: 7,
-    repoFull: 'leanprover-community/SpliceBot',
-    triggerMode: 'label',
-    labelCommand: 'ready',
-    labelName: 'ready-to-merge',
-    filePath: 'src/Foo.lean',
-    applyFailed: false,
-    noChanges: false,
-    automatedPrNumber: '99',
-    baseRef: 'master',
-    headRef: 'feature',
-    headLabel: 'author:feature',
-    runUrl: 'https://example.test/run',
-    tokenSource: 'inputs.token',
-    branchTokenSource: 'inputs.branch_token',
-    authzOutcome: 'success',
-    authzDecision: 'allow',
-    authzReason: '',
-    authzDetails: '',
-    authzTokenSource: 'inputs.authz_token',
-    labelAuthzOutcome: 'success',
-    labelAuthzDecision: 'allow',
-    labelAuthzReason: '',
-    labelAuthzDetails: '',
-    labelAuthzTokenSource: 'inputs.authz_token',
-    labelApplied: false,
-    forkOwner: '',
-    forkOwnerType: '',
-    outcomes: [['Create Pull Request', 'success'], ['Apply configured label', 'failure']],
-  });
-
-  assert.match(payload.body, /\*\*Split PR created, but label was not applied\*\*/);
-  assert.match(payload.body, /I created split PR #99/);
-  assert.match(payload.body, /Verify the workflow token can write labels/);
 });

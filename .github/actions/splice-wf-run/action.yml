@@ -256,24 +256,10 @@ runs:
           by @${{ steps.bridge.outputs.pr_author_login }} via a
           [review comment](${{ github.server_url }}/${{ steps.bridge.outputs.base_repo }}/pull/${{ steps.bridge.outputs.pr_number }}#discussion_r${{ steps.bridge.outputs.review_comment_id }})
           by @${{ steps.bridge.outputs.commenter_login }}.
+        labels: ${{ steps.resolve_trigger_command.outputs.trigger_mode == 'label' && steps.resolve_trigger_command.outputs.label_name || '' }}
         branch: ${{ steps.branch_and_copy.outputs.BRANCH }}
         branch-suffix: random
         delete-branch: true
-
-    - name: Apply configured label to generated split PR
-      if: steps.resolve_trigger_command.outputs.trigger_mode == 'label' && steps.authorize_label_command.outcome == 'success' && steps.cpr.outcome == 'success'
-      id: apply_label
-      uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
-      env:
-        ACTION_LIB_PATH: ${{ github.action_path }}/lib/apply-label-step.js
-        BASE_REPO: ${{ steps.bridge.outputs.base_repo }}
-        PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
-        LABEL_NAME: ${{ steps.resolve_trigger_command.outputs.label_name }}
-      with:
-        github-token: ${{ inputs.token || github.token }}
-        script: |
-          const run = require(process.env.ACTION_LIB_PATH);
-          await run({ core, github, env: process.env });
 
     - name: Comment back on the original PR
       if: always() && steps.bridge.outputs.pr_number != ''
@@ -305,7 +291,6 @@ runs:
         LABEL_AUTHZ_REASON: ${{ steps.authorize_label_command.outputs.authz_reason }}
         LABEL_AUTHZ_DETAILS: ${{ steps.authorize_label_command.outputs.authz_details }}
         LABEL_AUTHZ_TOKEN_SOURCE: ${{ steps.authorize_label_command.outputs.authz_token_source }}
-        LABEL_APPLIED: ${{ steps.apply_label.outcome == 'success' }}
         FORK_OWNER: ${{ steps.validate_cpr_inputs.outputs.fork_owner }}
         FORK_OWNER_TYPE: ${{ steps.validate_cpr_inputs.outputs.fork_owner_type }}
         INPUT_TOKEN: ${{ inputs.token }}
@@ -318,7 +303,6 @@ runs:
         CHECKOUT_HEAD_OUTCOME: ${{ steps.checkout_head.outcome }}
         AUTHORIZE_COMMENTER_OUTCOME: ${{ steps.authorize_commenter.outcome }}
         AUTHORIZE_LABEL_COMMAND_OUTCOME: ${{ steps.authorize_label_command.outcome }}
-        APPLY_LABEL_OUTCOME: ${{ steps.apply_label.outcome }}
         BRANCH_AND_COPY_OUTCOME: ${{ steps.branch_and_copy.outcome }}
         VALIDATE_CPR_INPUTS_OUTCOME: ${{ steps.validate_cpr_inputs.outcome }}
         CPR_OUTCOME: ${{ steps.cpr.outcome }}

@@ -23,7 +23,6 @@ function buildCommentBody({
   labelAuthzReason,
   labelAuthzDetails,
   labelAuthzTokenSource,
-  labelApplied,
   forkOwner,
   forkOwnerType,
   failedStepNames,
@@ -98,19 +97,10 @@ function buildCommentBody({
       'Confirm the review comment is on a file that actually changed in the current PR head commit range.',
       'Push the intended file changes first, then trigger the bot again with a new review comment.',
     ];
-  } else if (triggerMode === 'label' && automatedPrNumber && labelApplied) {
+  } else if (triggerMode === 'label' && automatedPrNumber) {
     title = 'Split PR created and labeled';
     bodyIntro = `Split off the changes to **${filePath}** in #${automatedPrNumber} and applied label **${labelName}** via splice-bot command \`${labelCommand}\`.`;
     adviceLines = [`Review and merge #${automatedPrNumber} if it looks correct.`];
-  } else if (triggerMode === 'label' && automatedPrNumber) {
-    title = 'Split PR created, but label was not applied';
-    bodyIntro = labelName
-      ? `I created split PR #${automatedPrNumber} for **${filePath}**, but couldn't apply label **${labelName}** via splice-bot command \`${labelCommand}\`.`
-      : `I created split PR #${automatedPrNumber} for **${filePath}**, but couldn't apply the requested label.`;
-    adviceLines = [
-      `Review and merge #${automatedPrNumber} if it looks correct.`,
-      'Verify the workflow token can write labels on the generated pull request and that the target label exists or can be created by the token.',
-    ];
   } else if (automatedPrNumber) {
     title = 'Split PR created';
     bodyIntro = `Split off the changes to **${filePath}** in #${automatedPrNumber}.`;
@@ -189,9 +179,7 @@ function buildCommentBody({
   const successBody = `**${title}**\n\n${bodyIntro}`;
   const failureBody = `**${title}**\n\n${bodyIntro}${failedStepsLine}\n\nAdvice:\n${adviceBlock}\n\nToken diagnostics:\n${tokenDiagnosticsBlock}\n\nRun logs: ${runUrl}\n\n${stepOutcomesDetails}`;
 
-  const wasSuccessful = triggerMode === 'label'
-    ? Boolean(automatedPrNumber) && labelApplied
-    : Boolean(automatedPrNumber);
+  const wasSuccessful = Boolean(automatedPrNumber);
   return wasSuccessful ? successBody : failureBody;
 }
 
@@ -225,7 +213,6 @@ function buildCallbackCommentPayload(input) {
     labelAuthzReason,
     labelAuthzDetails,
     labelAuthzTokenSource,
-    labelApplied,
     forkOwner,
     forkOwnerType,
     outcomes,
@@ -279,7 +266,6 @@ function buildCallbackCommentPayload(input) {
       labelAuthzReason,
       labelAuthzDetails,
       labelAuthzTokenSource,
-      labelApplied,
       forkOwner,
       forkOwnerType,
       failedStepNames,
