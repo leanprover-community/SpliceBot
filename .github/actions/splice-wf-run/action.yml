@@ -14,7 +14,7 @@ inputs:
     required: false
     default: 'true'
   min_repo_permission:
-    description: Minimum repo permission allowed to trigger splice-bot (anyone, triage, write)
+    description: Minimum repo permission allowed to trigger splice-bot (disabled, anyone, triage, write, maintain, admin)
     required: false
     default: 'anyone'
   allowed_teams:
@@ -23,6 +23,10 @@ inputs:
     default: ''
   allowed_users:
     description: Optional comma/newline-separated GitHub login allowlist
+    required: false
+    default: ''
+  label_commands:
+    description: Optional JSON array of label command objects ({command|keyword, label, min_repo_permission?, allowed_users?, allowed_teams?})
     required: false
     default: ''
   push_to_fork:
@@ -66,6 +70,7 @@ runs:
           commenter_login=event.comment.user.login
           pr_author_login=event.pull_request.user.login
           base_ref=outputs.base_ref
+          trigger_keyword=outputs.trigger_keyword
           base_repo=event.pull_request.base.repo.full_name
           head_repo=event.pull_request.head.repo.full_name
           head_sha=event.pull_request.head.sha
@@ -74,6 +79,16 @@ runs:
           committer=outputs.committer
           author=outputs.author
 
+    - name: Resolve configured trigger command
+      if: steps.bridge.outputs.file_path != ''
+      id: resolve_trigger_command
+      shell: bash
+      env:
+        RAW_LABEL_COMMANDS: ${{ inputs.label_commands }}
+        TRIGGER_KEYWORD: ${{ steps.bridge.outputs.trigger_keyword }}
+      run: |
+        set -euo pipefail
+        node "${{ github.action_path }}/lib/resolve-trigger-command-step.js"
     - name: Authorize commenter
       if: steps.bridge.outputs.file_path != ''
       id: authorize_commenter
@@ -95,8 +110,29 @@ runs:
           const run = require(process.env.ACTION_LIB_PATH);
           await run({ core, github, env: process.env });
 
+    - name: Authorize label command
+      if: steps.bridge.outputs.file_path != '' && steps.resolve_trigger_command.outputs.trigger_mode == 'label' && steps.authorize_commenter.outcome == 'success'
+      id: authorize_label_command
+      uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+      env:
+        ACTION_LIB_PATH: ${{ github.action_path }}/lib/authorize-label-command-step.js
+        COMMENTER_LOGIN: ${{ steps.bridge.outputs.commenter_login }}
+        BASE_REPO: ${{ steps.bridge.outputs.base_repo }}
+        LABEL_COMMAND: ${{ steps.resolve_trigger_command.outputs.label_command }}
+        LABEL_NAME: ${{ steps.resolve_trigger_command.outputs.label_name }}
+        MIN_REPO_PERMISSION: ${{ steps.resolve_trigger_command.outputs.label_min_repo_permission }}
+        RAW_ALLOWED_USERS_JSON: ${{ steps.resolve_trigger_command.outputs.label_allowed_users_json }}
+        RAW_ALLOWED_TEAMS_JSON: ${{ steps.resolve_trigger_command.outputs.label_allowed_teams_json }}
+        INPUT_TOKEN: ${{ inputs.token }}
+        AUTHZ_TOKEN: ${{ inputs.authz_token }}
+      with:
+        github-token: ${{ inputs.authz_token || inputs.token || github.token }}
+        script: |
+          const run = require(process.env.ACTION_LIB_PATH);
+          await run({ core, github, env: process.env });
+
     - name: Check out BASE (PR base repo @ base_ref)
-      if: steps.bridge.outputs.file_path != ''
+      if: steps.bridge.outputs.file_path != '' && steps.authorize_commenter.outcome == 'success' && (steps.resolve_trigger_command.outputs.trigger_mode != 'label' || steps.authorize_label_command.outcome == 'success')
       id: checkout_base
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       with:
@@ -107,7 +143,7 @@ runs:
         path: base
 
     - name: Check out HEAD (PR head repo)
-      if: steps.bridge.outputs.file_path != ''
+      if: steps.bridge.outputs.file_path != '' && steps.authorize_commenter.outcome == 'success' && (steps.resolve_trigger_command.outputs.trigger_mode != 'label' || steps.authorize_label_command.outcome == 'success')
       id: checkout_head
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       with:
@@ -118,7 +154,7 @@ runs:
         path: head
 
     - name: Stage file changes via 3-way patch apply
-      if: steps.bridge.outputs.file_path != ''
+      if: steps.bridge.outputs.file_path != '' && steps.authorize_commenter.outcome == 'success' && (steps.resolve_trigger_command.outputs.trigger_mode != 'label' || steps.authorize_label_command.outcome == 'success')
       id: branch_and_copy
       shell: bash
       env:
@@ -182,7 +218,7 @@ runs:
         fi
 
     - name: Validate create-pull-request inputs
-      if: steps.bridge.outputs.file_path != '' && steps.authorize_commenter.outcome == 'success' && steps.branch_and_copy.outputs.NO_CHANGES != 'true' && steps.branch_and_copy.outputs.APPLY_FAILED != 'true'
+      if: steps.bridge.outputs.file_path != '' && steps.authorize_commenter.outcome == 'success' && (steps.resolve_trigger_command.outputs.trigger_mode != 'label' || steps.authorize_label_command.outcome == 'success') && steps.branch_and_copy.outputs.NO_CHANGES != 'true' && steps.branch_and_copy.outputs.APPLY_FAILED != 'true'
       id: validate_cpr_inputs
       uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
       env:
@@ -199,7 +235,7 @@ runs:
           await runValidateCprInputsStep({ core, github, env: process.env });
 
     - name: Create Pull Request
-      if: steps.bridge.outputs.file_path != '' && steps.authorize_commenter.outcome == 'success' && steps.branch_and_copy.outputs.NO_CHANGES != 'true' && steps.branch_and_copy.outputs.APPLY_FAILED != 'true' && steps.validate_cpr_inputs.outcome == 'success'
+      if: steps.bridge.outputs.file_path != '' && steps.authorize_commenter.outcome == 'success' && (steps.resolve_trigger_command.outputs.trigger_mode != 'label' || steps.authorize_label_command.outcome == 'success') && steps.branch_and_copy.outputs.NO_CHANGES != 'true' && steps.branch_and_copy.outputs.APPLY_FAILED != 'true' && steps.validate_cpr_inputs.outcome == 'success'
       id: cpr
       uses: peter-evans/create-pull-request@98357b18bf14b5342f975ff684046ec3b2a07725 #v8.0.0
       with:
@@ -224,6 +260,21 @@ runs:
         branch-suffix: random
         delete-branch: true
 
+    - name: Apply configured label to generated split PR
+      if: steps.resolve_trigger_command.outputs.trigger_mode == 'label' && steps.authorize_label_command.outcome == 'success' && steps.cpr.outcome == 'success'
+      id: apply_label
+      uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+      env:
+        ACTION_LIB_PATH: ${{ github.action_path }}/lib/apply-label-step.js
+        BASE_REPO: ${{ steps.bridge.outputs.base_repo }}
+        PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
+        LABEL_NAME: ${{ steps.resolve_trigger_command.outputs.label_name }}
+      with:
+        github-token: ${{ inputs.token || github.token }}
+        script: |
+          const run = require(process.env.ACTION_LIB_PATH);
+          await run({ core, github, env: process.env });
+
     - name: Comment back on the original PR
       if: always() && steps.bridge.outputs.pr_number != ''
       uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
@@ -232,6 +283,11 @@ runs:
         ORIGINAL_PR_NUMBER: ${{ steps.bridge.outputs.pr_number }}
         REVIEW_COMMENT_ID: ${{ steps.bridge.outputs.review_comment_id }}
         REPO_FULL: ${{ steps.bridge.outputs.base_repo }}
+        TRIGGER_MODE: ${{ steps.resolve_trigger_command.outputs.trigger_mode }}
+        TRIGGER_KEYWORD: ${{ steps.bridge.outputs.trigger_keyword }}
+        TRIGGER_RESOLVE_ERROR: ${{ steps.resolve_trigger_command.outputs.resolve_error }}
+        LABEL_COMMAND: ${{ steps.resolve_trigger_command.outputs.label_command }}
+        LABEL_NAME: ${{ steps.resolve_trigger_command.outputs.label_name }}
         FILE_PATH: ${{ steps.bridge.outputs.file_path }}
         APPLY_FAILED: ${{ steps.branch_and_copy.outputs.APPLY_FAILED }}
         NO_CHANGES: ${{ steps.branch_and_copy.outputs.NO_CHANGES }}
@@ -244,6 +300,12 @@ runs:
         AUTHZ_DECISION: ${{ steps.authorize_commenter.outputs.authz_decision }}
         AUTHZ_REASON: ${{ steps.authorize_commenter.outputs.authz_reason }}
         AUTHZ_DETAILS: ${{ steps.authorize_commenter.outputs.authz_details }}
+        LABEL_AUTHZ_OUTCOME: ${{ steps.authorize_label_command.outcome }}
+        LABEL_AUTHZ_DECISION: ${{ steps.authorize_label_command.outputs.authz_decision }}
+        LABEL_AUTHZ_REASON: ${{ steps.authorize_label_command.outputs.authz_reason }}
+        LABEL_AUTHZ_DETAILS: ${{ steps.authorize_label_command.outputs.authz_details }}
+        LABEL_AUTHZ_TOKEN_SOURCE: ${{ steps.authorize_label_command.outputs.authz_token_source }}
+        LABEL_APPLIED: ${{ steps.apply_label.outcome == 'success' }}
         FORK_OWNER: ${{ steps.validate_cpr_inputs.outputs.fork_owner }}
         FORK_OWNER_TYPE: ${{ steps.validate_cpr_inputs.outputs.fork_owner_type }}
         INPUT_TOKEN: ${{ inputs.token }}
@@ -251,9 +313,12 @@ runs:
         PUSH_TO_FORK: ${{ inputs.push_to_fork }}
         BRANCH_TOKEN: ${{ inputs.branch_token }}
         BRIDGE_OUTCOME: ${{ steps.bridge.outcome }}
+        RESOLVE_TRIGGER_COMMAND_OUTCOME: ${{ steps.resolve_trigger_command.outcome }}
         CHECKOUT_BASE_OUTCOME: ${{ steps.checkout_base.outcome }}
         CHECKOUT_HEAD_OUTCOME: ${{ steps.checkout_head.outcome }}
         AUTHORIZE_COMMENTER_OUTCOME: ${{ steps.authorize_commenter.outcome }}
+        AUTHORIZE_LABEL_COMMAND_OUTCOME: ${{ steps.authorize_label_command.outcome }}
+        APPLY_LABEL_OUTCOME: ${{ steps.apply_label.outcome }}
         BRANCH_AND_COPY_OUTCOME: ${{ steps.branch_and_copy.outcome }}
         VALIDATE_CPR_INPUTS_OUTCOME: ${{ steps.validate_cpr_inputs.outcome }}
         CPR_OUTCOME: ${{ steps.cpr.outcome }}

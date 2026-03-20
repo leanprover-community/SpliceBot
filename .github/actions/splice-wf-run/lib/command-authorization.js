@@ -1,80 +1,58 @@
-function parseList(raw) {
-  return String(raw || '')
-    .split(/[\n,]/)
-    .map((item) => item.trim().toLowerCase())
-    .filter(Boolean);
+function parseJsonList(raw, fieldName) {
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      throw new Error(`${fieldName} must be an array.`);
+    }
+    return parsed.map((item) => String(item).trim().toLowerCase()).filter(Boolean);
+  } catch (error) {
+    throw new Error(`Could not parse ${fieldName}: ${error.message}`);
+  }
 }
 
-function buildDetails({
+async function authorizeCommandActor({
   commenterLogin,
-  prAuthorLogin,
   baseRepo,
-  allowPrAuthor,
+  commandName,
+  labelName,
   minRepoPermission,
-  repoPermission,
-  allowedUsers,
-  allowedTeams,
-  matchedRules,
-  authzTokenSource,
-}) {
-  return [
-    `commenter: ${commenterLogin}`,
-    `pr author: ${prAuthorLogin}`,
-    `base repo: ${baseRepo}`,
-    `allow_pr_author: ${allowPrAuthor}`,
-    `min_repo_permission: ${minRepoPermission}`,
-    `observed_repo_permission: ${repoPermission}`,
-    `allowed_users: ${allowedUsers.length > 0 ? allowedUsers.join(', ') : '(none)'}`,
-    `allowed_teams: ${allowedTeams.length > 0 ? allowedTeams.join(', ') : '(none)'}`,
-    `matched_rules: ${matchedRules.length > 0 ? matchedRules.join(', ') : '(none)'}`,
-    `authz token source: ${authzTokenSource}`,
-  ].join('\n');
-}
-
-async function authorizeCommenter({
-  allowPrAuthor,
-  minRepoPermission,
-  commenterLogin,
-  prAuthorLogin,
-  baseRepo,
-  rawAllowedTeams,
-  rawAllowedUsers,
+  rawAllowedUsersJson,
+  rawAllowedTeamsJson,
   authzTokenSource,
   github,
   onInfo = () => {},
 }) {
-  const allowedTeams = parseList(rawAllowedTeams);
-  const allowedUsers = parseList(rawAllowedUsers);
-  const validMinPermissions = new Set(['disabled', 'anyone', 'triage', 'write', 'maintain', 'admin']);
-
-  if (!validMinPermissions.has(minRepoPermission)) {
+  let allowedUsers;
+  let allowedTeams;
+  try {
+    allowedUsers = parseJsonList(rawAllowedUsersJson, 'label allowed_users');
+    allowedTeams = parseJsonList(rawAllowedTeamsJson, 'label allowed_teams');
+  } catch (error) {
     return {
       decision: 'error',
-      reason: `Invalid min_repo_permission '${minRepoPermission}'. Expected one of: disabled, anyone, triage, write, maintain, admin.`,
+      reason: error.message,
       details: [
-        `commenter: ${commenterLogin || '(missing)'}`,
-        `base repo: ${baseRepo || '(missing)'}`,
+        `label command: ${commandName || '(missing)'}`,
+        `label: ${labelName || '(missing)'}`,
       ].join('\n'),
     };
   }
 
-  if (!commenterLogin || !prAuthorLogin || !baseRepo) {
+  if (!commenterLogin || !baseRepo || !commandName || !labelName) {
     return {
       decision: 'error',
-      reason: 'Missing bridge data required for authorization.',
+      reason: 'Missing label command authorization inputs.',
       details: [
         `commenter_login: ${commenterLogin || '(missing)'}`,
-        `pr_author_login: ${prAuthorLogin || '(missing)'}`,
         `base_repo: ${baseRepo || '(missing)'}`,
-        'Ensure splice.yaml emits comment.user.login, pull_request.user.login, and pull_request.base.repo.full_name.',
+        `label_command: ${commandName || '(missing)'}`,
+        `label_name: ${labelName || '(missing)'}`,
       ].join('\n'),
     };
   }
 
-  const repoParts = baseRepo.split('/');
-  const owner = repoParts[0];
-  const repo = repoParts[1];
-  if (!owner || !repo || repoParts.length !== 2) {
+  const [owner, repo] = baseRepo.split('/');
+  if (!owner || !repo || baseRepo.split('/').length !== 2) {
     return {
       decision: 'error',
       reason: `Invalid base repo format '${baseRepo}'. Expected owner/repo.`,
@@ -98,27 +76,31 @@ async function authorizeCommenter({
     maintain: permissionRank.maintain,
     admin: permissionRank.admin,
   };
+
+  if (!(minRepoPermission in thresholdByPermission)) {
+    return {
+      decision: 'error',
+      reason: `Invalid label command min_repo_permission '${minRepoPermission}'. Expected one of: disabled, anyone, triage, write, maintain, admin.`,
+      details: `label command: ${commandName}`,
+    };
+  }
+
   const minThreshold = thresholdByPermission[minRepoPermission];
   let repoPermission = 'not-checked';
   const matchedRules = [];
-
-  const getDetails = () =>
-    buildDetails({
-      commenterLogin,
-      prAuthorLogin,
-      baseRepo,
-      allowPrAuthor,
-      minRepoPermission,
-      repoPermission,
-      allowedUsers,
-      allowedTeams,
-      matchedRules,
-      authzTokenSource,
-    });
-
-  if (allowPrAuthor && commenterLogin.toLowerCase() === prAuthorLogin.toLowerCase()) {
-    matchedRules.push('pr-author');
-  }
+  const buildDetails = () =>
+    [
+      `commenter: ${commenterLogin}`,
+      `base repo: ${baseRepo}`,
+      `label command: ${commandName}`,
+      `label: ${labelName}`,
+      `required repo permission: ${minRepoPermission}`,
+      `observed_repo_permission: ${repoPermission}`,
+      `allowed_users: ${allowedUsers.length > 0 ? allowedUsers.join(', ') : '(none)'}`,
+      `allowed_teams: ${allowedTeams.length > 0 ? allowedTeams.join(', ') : '(none)'}`,
+      `matched_rules: ${matchedRules.length > 0 ? matchedRules.join(', ') : '(none)'}`,
+      `authz token source: ${authzTokenSource}`,
+    ].join('\n');
 
   if (allowedUsers.includes(commenterLogin.toLowerCase())) {
     matchedRules.push('allowed-users');
@@ -127,8 +109,8 @@ async function authorizeCommenter({
   if (matchedRules.length > 0) {
     return {
       decision: 'allow',
-      reason: `Authorized ${commenterLogin} via ${matchedRules.join(', ')}.`,
-      details: getDetails(),
+      reason: `Authorized label command '${commandName}' for ${commenterLogin} via ${matchedRules.join(', ')}.`,
+      details: buildDetails(),
     };
   }
 
@@ -136,13 +118,13 @@ async function authorizeCommenter({
     matchedRules.push('repo-permission>=anyone');
     return {
       decision: 'allow',
-      reason: `Authorized ${commenterLogin} via ${matchedRules.join(', ')}.`,
-      details: getDetails(),
+      reason: `Authorized label command '${commandName}' for ${commenterLogin} via ${matchedRules.join(', ')}.`,
+      details: buildDetails(),
     };
   }
 
   if (minRepoPermission === 'disabled') {
-    onInfo('Repository permission authorization is disabled for this trigger policy.');
+    onInfo(`Repository permission authorization is disabled for label command '${commandName}'.`);
   }
 
   if (minRepoPermission !== 'disabled' && minThreshold !== null) {
@@ -173,8 +155,8 @@ async function authorizeCommenter({
       matchedRules.push(`repo-permission>=${minRepoPermission}`);
       return {
         decision: 'allow',
-        reason: `Authorized ${commenterLogin} via ${matchedRules.join(', ')}.`,
-        details: getDetails(),
+        reason: `Authorized label command '${commandName}' for ${commenterLogin} via ${matchedRules.join(', ')}.`,
+        details: buildDetails(),
       };
     }
   }
@@ -198,7 +180,7 @@ async function authorizeCommenter({
     if (ownerType !== 'Organization') {
       return {
         decision: 'deny',
-        reason: `allowed_teams was configured, but ${baseRepo} is not organization-owned.`,
+        reason: `label command allowed_teams was configured, but ${baseRepo} is not organization-owned.`,
         details: [
           `commenter: ${commenterLogin}`,
           `base repo owner type: ${ownerType}`,
@@ -214,7 +196,7 @@ async function authorizeCommenter({
       if (!teamOrg || !teamSlug) {
         return {
           decision: 'error',
-          reason: `Invalid team spec '${teamSpec}'. Use team-slug or org/team-slug.`,
+          reason: `Invalid label command team spec '${teamSpec}'. Use team-slug or org/team-slug.`,
           details: `configured teams: ${allowedTeams.join(', ')}`,
         };
       }
@@ -229,8 +211,8 @@ async function authorizeCommenter({
           matchedRules.push(`team:${teamOrg}/${teamSlug}`);
           return {
             decision: 'allow',
-            reason: `Authorized ${commenterLogin} via ${matchedRules.join(', ')}.`,
-            details: getDetails(),
+            reason: `Authorized label command '${commandName}' for ${commenterLogin} via ${matchedRules.join(', ')}.`,
+            details: buildDetails(),
           };
         }
       } catch (error) {
@@ -252,12 +234,12 @@ async function authorizeCommenter({
 
   return {
     decision: 'deny',
-    reason: `Commenter ${commenterLogin} is not authorized to trigger splice-bot.`,
-    details: getDetails(),
+    reason: `Commenter ${commenterLogin} is not authorized to run label command '${commandName}'.`,
+    details: buildDetails(),
   };
 }
 
 module.exports = {
-  authorizeCommenter,
-  parseList,
+  authorizeCommandActor,
+  parseJsonList,
 };

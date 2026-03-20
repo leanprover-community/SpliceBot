@@ -1,4 +1,9 @@
 function buildCommentBody({
+  triggerMode,
+  triggerKeyword,
+  triggerResolveError,
+  labelCommand,
+  labelName,
   filePath,
   applyFailed,
   noChanges,
@@ -13,6 +18,12 @@ function buildCommentBody({
   authzReason,
   authzDetails,
   authzTokenSource,
+  labelAuthzOutcome,
+  labelAuthzDecision,
+  labelAuthzReason,
+  labelAuthzDetails,
+  labelAuthzTokenSource,
+  labelApplied,
   forkOwner,
   forkOwnerType,
   failedStepNames,
@@ -29,6 +40,18 @@ function buildCommentBody({
       'Ensure the source workflow uploaded the `workflow-data` artifact and this run was triggered from a `pull_request_review_comment` event.',
       'Check the run logs link below and re-run after posting a fresh review comment on a file line.',
     ];
+  } else if (triggerMode === 'invalid') {
+    title = 'Invalid label command configuration';
+    bodyIntro = triggerResolveError || 'I could not parse the configured `label_commands` input.';
+    adviceLines = [
+      'Fix the `label_commands` workflow input so it is valid JSON and each entry includes `command` (or `keyword`) plus `label`.',
+    ];
+  } else if (triggerMode === 'unknown') {
+    title = 'Unknown splice-bot command';
+    bodyIntro = triggerResolveError || `No configured splice-bot command matched \`${triggerKeyword}\`.`;
+    adviceLines = [
+      'Either remove the keyword to run the default split-PR flow, or add a matching entry to `label_commands`.',
+    ];
   } else if (authzOutcome === 'failure' || authzDecision === 'deny') {
     title = 'Not authorized to trigger splice-bot';
     bodyIntro = authzReason
@@ -37,6 +60,20 @@ function buildCommentBody({
     adviceLines = [
       'If this should be allowed, update workflow inputs (`allow_pr_author`, `min_repo_permission`, `allowed_users`, `allowed_teams`) or adjust repository/team permissions.',
       'You can also re-run using an authorized commenter account.',
+    ];
+  } else if (triggerMode === 'label' && (labelAuthzOutcome === 'failure' || labelAuthzDecision === 'deny')) {
+    title = 'Not authorized to run label command';
+    bodyIntro = labelAuthzReason
+      ? labelAuthzReason
+      : `This review comment does not meet the permission requirement for label command \`${labelCommand}\`.`;
+    adviceLines = [
+      'Raise the triggering user permission level or lower the command-specific `min_repo_permission` in `label_commands` if that is intended.',
+    ];
+  } else if (triggerMode === 'label' && labelAuthzDecision === 'error') {
+    title = 'Label command authorization failed';
+    bodyIntro = labelAuthzReason || 'I could not complete the authorization check for this label command.';
+    adviceLines = [
+      'Verify the auth-check token has read access for collaborator permission lookups.',
     ];
   } else if (authzDecision === 'error') {
     title = 'Authorization check failed';
@@ -60,6 +97,19 @@ function buildCommentBody({
     adviceLines = [
       'Confirm the review comment is on a file that actually changed in the current PR head commit range.',
       'Push the intended file changes first, then trigger the bot again with a new review comment.',
+    ];
+  } else if (triggerMode === 'label' && automatedPrNumber && labelApplied) {
+    title = 'Split PR created and labeled';
+    bodyIntro = `Split off the changes to **${filePath}** in #${automatedPrNumber} and applied label **${labelName}** via splice-bot command \`${labelCommand}\`.`;
+    adviceLines = [`Review and merge #${automatedPrNumber} if it looks correct.`];
+  } else if (triggerMode === 'label' && automatedPrNumber) {
+    title = 'Split PR created, but label was not applied';
+    bodyIntro = labelName
+      ? `I created split PR #${automatedPrNumber} for **${filePath}**, but couldn't apply label **${labelName}** via splice-bot command \`${labelCommand}\`.`
+      : `I created split PR #${automatedPrNumber} for **${filePath}**, but couldn't apply the requested label.`;
+    adviceLines = [
+      `Review and merge #${automatedPrNumber} if it looks correct.`,
+      'Verify the workflow token can write labels on the generated pull request and that the target label exists or can be created by the token.',
     ];
   } else if (automatedPrNumber) {
     title = 'Split PR created';
@@ -116,12 +166,33 @@ function buildCommentBody({
     }
   }
 
+  if (labelAuthzDetails) {
+    const labelDetailLines = labelAuthzDetails
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => `- label command auth: ${line}`);
+    if (labelDetailLines.length > 0) {
+      tokenDiagnostics.push(...labelDetailLines);
+    }
+  }
+
+  if (triggerKeyword) {
+    tokenDiagnostics.push(`- trigger keyword: \`${triggerKeyword}\``);
+  }
+
+  if (labelAuthzTokenSource && labelAuthzTokenSource !== 'unknown') {
+    tokenDiagnostics.push(`- label authz token source: \`${labelAuthzTokenSource}\``);
+  }
+
   const tokenDiagnosticsBlock = tokenDiagnostics.join('\n');
   const stepOutcomesDetails = `<details>\n<summary>Step outcomes</summary>\n\n${outcomeLines}\n</details>`;
   const successBody = `**${title}**\n\n${bodyIntro}`;
   const failureBody = `**${title}**\n\n${bodyIntro}${failedStepsLine}\n\nAdvice:\n${adviceBlock}\n\nToken diagnostics:\n${tokenDiagnosticsBlock}\n\nRun logs: ${runUrl}\n\n${stepOutcomesDetails}`;
 
-  return automatedPrNumber ? successBody : failureBody;
+  const wasSuccessful = triggerMode === 'label'
+    ? Boolean(automatedPrNumber) && labelApplied
+    : Boolean(automatedPrNumber);
+  return wasSuccessful ? successBody : failureBody;
 }
 
 function buildCallbackCommentPayload(input) {
@@ -129,6 +200,11 @@ function buildCallbackCommentPayload(input) {
     originalPrNumber,
     reviewCommentId,
     repoFull,
+    triggerMode,
+    triggerKeyword,
+    triggerResolveError,
+    labelCommand,
+    labelName,
     filePath,
     applyFailed,
     noChanges,
@@ -144,6 +220,12 @@ function buildCallbackCommentPayload(input) {
     authzReason,
     authzDetails,
     authzTokenSource,
+    labelAuthzOutcome,
+    labelAuthzDecision,
+    labelAuthzReason,
+    labelAuthzDetails,
+    labelAuthzTokenSource,
+    labelApplied,
     forkOwner,
     forkOwnerType,
     outcomes,
@@ -173,6 +255,11 @@ function buildCallbackCommentPayload(input) {
     originalPrNumber,
     reviewCommentId,
     body: buildCommentBody({
+      triggerMode,
+      triggerKeyword,
+      triggerResolveError,
+      labelCommand,
+      labelName,
       filePath,
       applyFailed,
       noChanges,
@@ -187,6 +274,12 @@ function buildCallbackCommentPayload(input) {
       authzReason,
       authzDetails,
       authzTokenSource,
+      labelAuthzOutcome,
+      labelAuthzDecision,
+      labelAuthzReason,
+      labelAuthzDetails,
+      labelAuthzTokenSource,
+      labelApplied,
       forkOwner,
       forkOwnerType,
       failedStepNames,
