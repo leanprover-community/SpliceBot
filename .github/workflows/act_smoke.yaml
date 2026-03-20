@@ -7,10 +7,29 @@ on:
       - ".github/workflows/*.yaml"
       - ".github/actions/**/*.yml"
       - ".github/actions/**/*.yaml"
+      - ".github/actions/**/*.js"
       - "tests/actions/**"
+      - "tests/node/**"
   workflow_dispatch:
 
 jobs:
+  node-unit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: "20"
+
+      - name: Run node unit tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test tests/node/*.test.js
+
   act-smoke:
     runs-on: ubuntu-latest
     steps:
