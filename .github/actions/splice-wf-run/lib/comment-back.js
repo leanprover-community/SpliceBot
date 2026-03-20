@@ -80,11 +80,8 @@ function buildCommentBody({
     if (failedStepNames.includes('Stage file changes')) {
       adviceLines.push('Inspect the "Stage file changes" logs for git fetch/apply errors and retry after rebasing if needed.');
     }
-    if (failedStepNames.includes('Detect push_to_fork owner type')) {
-      adviceLines.push('Verify that `push_to_fork` refers to an existing fork owner and that the workflow token can query repository/user metadata.');
-    }
     if (failedStepNames.includes('Validate create-pull-request inputs')) {
-      adviceLines.push('Fix invalid `create-pull-request` inputs reported in the validation step logs (for example `push_to_fork`, `maintainer_can_modify`, author/committer format, or generated branch name).');
+      adviceLines.push('Fix invalid `create-pull-request` inputs reported in the validation step logs (for example `push_to_fork`, `maintainer_can_modify`, fork owner lookup, author/committer format, or generated branch name).');
     }
     if (failedStepNames.includes('Create Pull Request')) {
       adviceLines.push('Check the "Create Pull Request" logs for input validation errors (for example invalid `maintainer-can-modify` values) and other action-level failures.');

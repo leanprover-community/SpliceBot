@@ -1,5 +1,22 @@
 const { execFileSync } = require('node:child_process');
 
+async function resolveForkOwner({ github, pushToFork, onInfo = () => {}, onWarning = () => {} }) {
+  const [forkOwner] = String(pushToFork || '').split('/');
+  if (!forkOwner) {
+    return { forkOwner: '', forkOwnerType: 'Unknown' };
+  }
+
+  try {
+    const { data } = await github.rest.users.getByUsername({ username: forkOwner });
+    const forkOwnerType = data.type || 'Unknown';
+    onInfo(`push_to_fork owner ${forkOwner} type: ${forkOwnerType}`);
+    return { forkOwner, forkOwnerType };
+  } catch (error) {
+    onWarning(`Unable to resolve push_to_fork owner type for ${forkOwner}: ${error.message}`);
+    return { forkOwner, forkOwnerType: 'Unknown' };
+  }
+}
+
 function validateCprInputs({
   pushToFork,
   maintainerCanModify,
@@ -49,30 +66,38 @@ function validateCprInputs({
   return { warnings };
 }
 
-function runFromEnvironment(env = process.env) {
+async function runValidateCprInputsStep({ core, github, env = process.env }) {
+  const { forkOwner, forkOwnerType } = await resolveForkOwner({
+    github,
+    pushToFork: env.PUSH_TO_FORK || '',
+    onInfo: (message) => core.info(message),
+    onWarning: (message) => core.warning(message),
+  });
+
   const { warnings } = validateCprInputs({
     pushToFork: env.PUSH_TO_FORK || '',
     maintainerCanModify: env.MAINTAINER_CAN_MODIFY || '',
     branchName: env.BRANCH_NAME || '',
     committer: env.COMMITTER || '',
     author: env.AUTHOR || '',
-    forkOwnerType: env.FORK_OWNER_TYPE || '',
+    forkOwnerType,
   });
 
+  core.setOutput('fork_owner', forkOwner);
+  core.setOutput('fork_owner_type', forkOwnerType);
+
   for (const warning of warnings) {
-    console.log(`::warning::${warning}`);
+    core.warning(warning);
   }
 }
 
 if (require.main === module) {
-  try {
-    runFromEnvironment();
-  } catch (error) {
-    console.log(`::error::${error.message}`);
-    process.exit(1);
-  }
+  console.error('This module is intended to be run via actions/github-script.');
+  process.exit(1);
 }
 
 module.exports = {
+  resolveForkOwner,
+  runValidateCprInputsStep,
   validateCprInputs,
 };
