@@ -1,6 +1,8 @@
 const { authorizeCommenter } = require('./authorize-commenter');
+const { deriveTokenSources } = require('./token-sources');
 
 module.exports = async function runAuthorizeCommenterStep({ core, github, env = process.env }) {
+  const { authzTokenSource } = deriveTokenSources(env);
   const result = await authorizeCommenter({
     allowPrAuthor: (env.ALLOW_PR_AUTHOR || 'true') === 'true',
     minRepoPermission: (env.MIN_REPO_PERMISSION || 'anyone').trim().toLowerCase(),
@@ -9,7 +11,7 @@ module.exports = async function runAuthorizeCommenterStep({ core, github, env = 
     baseRepo: (env.BASE_REPO || '').trim(),
     rawAllowedTeams: env.RAW_ALLOWED_TEAMS || '',
     rawAllowedUsers: env.RAW_ALLOWED_USERS || '',
-    authzTokenSource: env.AUTHZ_TOKEN_SOURCE || 'unknown',
+    authzTokenSource,
     github,
     onInfo: (message) => core.info(message),
   });
@@ -17,7 +19,7 @@ module.exports = async function runAuthorizeCommenterStep({ core, github, env = 
   core.setOutput('authz_decision', result.decision);
   core.setOutput('authz_reason', result.reason);
   core.setOutput('authz_details', result.details);
-  core.setOutput('authz_token_source', env.AUTHZ_TOKEN_SOURCE || 'unknown');
+  core.setOutput('authz_token_source', authzTokenSource);
 
   if (result.decision === 'allow') {
     core.info(result.reason);

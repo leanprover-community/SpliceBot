@@ -1,6 +1,8 @@
 const { buildCallbackCommentPayload } = require('./comment-back');
+const { deriveTokenSources } = require('./token-sources');
 
 module.exports = async function runCommentBackStep({ core, github, env = process.env }) {
+  const { tokenSource, authzTokenSource, branchTokenSource } = deriveTokenSources(env);
   const payload = buildCallbackCommentPayload({
     originalPrNumber: Number(env.ORIGINAL_PR_NUMBER || ''),
     reviewCommentId: Number(env.REVIEW_COMMENT_ID || ''),
@@ -13,13 +15,13 @@ module.exports = async function runCommentBackStep({ core, github, env = process
     headRef: env.HEAD_REF || '',
     headLabel: env.HEAD_LABEL || '',
     runUrl: env.RUN_URL || '',
-    tokenSource: env.TOKEN_SOURCE || '',
-    branchTokenSource: env.BRANCH_TOKEN_SOURCE || '',
+    tokenSource,
+    branchTokenSource,
     authzOutcome: env.AUTHZ_OUTCOME || '',
     authzDecision: env.AUTHZ_DECISION || '',
     authzReason: env.AUTHZ_REASON || '',
     authzDetails: env.AUTHZ_DETAILS || '',
-    authzTokenSource: env.AUTHZ_TOKEN_SOURCE || 'unknown',
+    authzTokenSource,
     forkOwner: env.FORK_OWNER || '',
     forkOwnerType: env.FORK_OWNER_TYPE || '',
     outcomes: JSON.parse(env.STEP_OUTCOMES_JSON || '[]'),

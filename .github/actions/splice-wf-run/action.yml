@@ -74,19 +74,6 @@ runs:
           committer=outputs.committer
           author=outputs.author
 
-    - name: Prepare runtime context
-      id: prepare
-      shell: bash
-      env:
-        INPUT_TOKEN: ${{ inputs.token }}
-        PUSH_TO_FORK: ${{ inputs.push_to_fork }}
-        AUTHZ_TOKEN: ${{ inputs.authz_token }}
-        BRANCH_TOKEN: ${{ inputs.branch_token }}
-        ACTION_LIB_PATH: ${{ github.action_path }}/lib/prepare-context-step.js
-      run: |
-        set -euo pipefail
-        node "${ACTION_LIB_PATH}"
-
     - name: Authorize commenter
       if: steps.bridge.outputs.file_path != ''
       id: authorize_commenter
@@ -100,7 +87,10 @@ runs:
         COMMENTER_LOGIN: ${{ steps.bridge.outputs.commenter_login }}
         PR_AUTHOR_LOGIN: ${{ steps.bridge.outputs.pr_author_login }}
         BASE_REPO: ${{ steps.bridge.outputs.base_repo }}
-        AUTHZ_TOKEN_SOURCE: ${{ steps.prepare.outputs.authz_token_source }}
+        INPUT_TOKEN: ${{ inputs.token }}
+        AUTHZ_TOKEN: ${{ inputs.authz_token }}
+        PUSH_TO_FORK: ${{ inputs.push_to_fork }}
+        BRANCH_TOKEN: ${{ inputs.branch_token }}
       with:
         github-token: ${{ inputs.authz_token || inputs.token || github.token }}
         script: |
@@ -264,17 +254,18 @@ runs:
         HEAD_REF: ${{ steps.bridge.outputs.head_ref }}
         HEAD_LABEL: ${{ steps.bridge.outputs.head_label }}
         RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}
-        TOKEN_SOURCE: ${{ steps.prepare.outputs.token_source }}
-        BRANCH_TOKEN_SOURCE: ${{ steps.prepare.outputs.branch_token_source }}
         AUTHZ_OUTCOME: ${{ steps.authorize_commenter.outcome }}
         AUTHZ_DECISION: ${{ steps.authorize_commenter.outputs.authz_decision }}
         AUTHZ_REASON: ${{ steps.authorize_commenter.outputs.authz_reason }}
         AUTHZ_DETAILS: ${{ steps.authorize_commenter.outputs.authz_details }}
-        AUTHZ_TOKEN_SOURCE: ${{ steps.authorize_commenter.outputs.authz_token_source }}
         FORK_OWNER: ${{ steps.fork_owner.outputs.fork_owner }}
         FORK_OWNER_TYPE: ${{ steps.fork_owner.outputs.fork_owner_type }}
+        INPUT_TOKEN: ${{ inputs.token }}
+        AUTHZ_TOKEN: ${{ inputs.authz_token }}
+        PUSH_TO_FORK: ${{ inputs.push_to_fork }}
+        BRANCH_TOKEN: ${{ inputs.branch_token }}
         STEP_OUTCOMES_JSON: >-
-          [["Consume bridge artifact","${{ steps.bridge.outcome }}"],["Prepare runtime context","${{ steps.prepare.outcome }}"],["Check out BASE","${{ steps.checkout_base.outcome }}"],["Check out HEAD","${{ steps.checkout_head.outcome }}"],["Authorize commenter","${{ steps.authorize_commenter.outcome }}"],["Stage file changes","${{ steps.branch_and_copy.outcome }}"],["Detect push_to_fork owner type","${{ steps.fork_owner.outcome }}"],["Validate create-pull-request inputs","${{ steps.validate_cpr_inputs.outcome }}"],["Create Pull Request","${{ steps.cpr.outcome }}"]]
+          [["Consume bridge artifact","${{ steps.bridge.outcome }}"],["Check out BASE","${{ steps.checkout_base.outcome }}"],["Check out HEAD","${{ steps.checkout_head.outcome }}"],["Authorize commenter","${{ steps.authorize_commenter.outcome }}"],["Stage file changes","${{ steps.branch_and_copy.outcome }}"],["Detect push_to_fork owner type","${{ steps.fork_owner.outcome }}"],["Validate create-pull-request inputs","${{ steps.validate_cpr_inputs.outcome }}"],["Create Pull Request","${{ steps.cpr.outcome }}"]]
       with:
         github-token: ${{ inputs.token || github.token }}
         script: |
