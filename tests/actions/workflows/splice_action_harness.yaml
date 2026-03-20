@@ -41,7 +41,7 @@ jobs:
           source_workflow: act-harness
           min_repo_permission: bogus
           bridge_override_json: >-
-            {"file_path":"src/Foo.lean","commenter_login":"reviewer","pr_author_login":"author","base_ref":"master","base_repo":"leanprover-community/SpliceBot","head_repo":"leanprover-community/SpliceBot","head_sha":"1111111111111111111111111111111111111111","head_ref":"feature","head_label":"author:feature","committer":"github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>","author":"author <12345+author@users.noreply.github.com>"}
+            {"meta":{"schema_version":2,"repository":"leanprover-community/SpliceBot","workflow_name":"Splice Action Act Harness","workflow_run_id":"1","workflow_run_attempt":"1","event_name":"pull_request_review_comment","head_sha":"1111111111111111111111111111111111111111","created_at":"2026-03-20T00:00:00Z","pr_number":1,"event":{"comment":{"id":1,"path":"src/Foo.lean","user":{"login":"reviewer"}},"pull_request":{"user":{"login":"author"},"base":{"repo":{"full_name":"leanprover-community/SpliceBot"},"ref":"master"},"head":{"repo":{"full_name":"leanprover-community/SpliceBot"},"sha":"1111111111111111111111111111111111111111","ref":"feature","label":"author:feature"}}}},"outputs":{"base_ref":"master","committer":"github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>","author":"author <12345+author@users.noreply.github.com>"}}
 
       - name: Assert invalid permission failed
         shell: bash
@@ -62,7 +62,7 @@ jobs:
         with:
           source_workflow: act-harness
           bridge_override_json: >-
-            {"file_path":"src/Foo.lean","commenter_login":"reviewer","pr_author_login":"author","base_ref":"master","base_repo":"not-a-repo","head_repo":"leanprover-community/SpliceBot","head_sha":"1111111111111111111111111111111111111111","head_ref":"feature","head_label":"author:feature","committer":"github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>","author":"author <12345+author@users.noreply.github.com>"}
+            {"meta":{"schema_version":2,"repository":"leanprover-community/SpliceBot","workflow_name":"Splice Action Act Harness","workflow_run_id":"1","workflow_run_attempt":"1","event_name":"pull_request_review_comment","head_sha":"1111111111111111111111111111111111111111","created_at":"2026-03-20T00:00:00Z","pr_number":1,"event":{"comment":{"id":1,"path":"src/Foo.lean","user":{"login":"reviewer"}},"pull_request":{"user":{"login":"author"},"base":{"repo":{"full_name":"not-a-repo"},"ref":"master"},"head":{"repo":{"full_name":"leanprover-community/SpliceBot"},"sha":"1111111111111111111111111111111111111111","ref":"feature","label":"author:feature"}}}},"outputs":{"base_ref":"master","committer":"github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>","author":"author <12345+author@users.noreply.github.com>"}}
 
       - name: Assert invalid base repo format failed
         shell: bash
@@ -83,7 +83,7 @@ jobs:
         with:
           source_workflow: act-harness
           bridge_override_json: >-
-            {"file_path":"src/Foo.lean","commenter_login":"reviewer","base_ref":"master","base_repo":"leanprover-community/SpliceBot","head_repo":"leanprover-community/SpliceBot","head_sha":"1111111111111111111111111111111111111111","head_ref":"feature","head_label":"author:feature","committer":"github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>","author":"author <12345+author@users.noreply.github.com>"}
+            {"meta":{"schema_version":2,"repository":"leanprover-community/SpliceBot","workflow_name":"Splice Action Act Harness","workflow_run_id":"1","workflow_run_attempt":"1","event_name":"pull_request_review_comment","head_sha":"1111111111111111111111111111111111111111","created_at":"2026-03-20T00:00:00Z","pr_number":1,"event":{"comment":{"id":1,"path":"src/Foo.lean","user":{"login":"reviewer"}},"pull_request":{"base":{"repo":{"full_name":"leanprover-community/SpliceBot"},"ref":"master"},"head":{"repo":{"full_name":"leanprover-community/SpliceBot"},"sha":"1111111111111111111111111111111111111111","ref":"feature","label":"author:feature"}}}},"outputs":{"base_ref":"master","committer":"github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>","author":"author <12345+author@users.noreply.github.com>"}}
 
       - name: Assert missing bridge data failed
         shell: bash
@@ -105,7 +105,7 @@ jobs:
           source_workflow: act-harness
           allow_pr_author: 'true'
           bridge_override_json: >-
-            {"file_path":"src/Foo.lean","commenter_login":"author","pr_author_login":"author","pr_number":"1","review_comment_id":"1","base_ref":"master","base_repo":"example/definitely-does-not-exist","head_repo":"example/definitely-does-not-exist","head_sha":"1111111111111111111111111111111111111111","head_ref":"feature","head_label":"author:feature","committer":"github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>","author":"author <12345+author@users.noreply.github.com>"}
+            {"meta":{"schema_version":2,"repository":"leanprover-community/SpliceBot","workflow_name":"Splice Action Act Harness","workflow_run_id":"1","workflow_run_attempt":"1","event_name":"pull_request_review_comment","head_sha":"1111111111111111111111111111111111111111","created_at":"2026-03-20T00:00:00Z","pr_number":1,"event":{"comment":{"id":1,"path":"src/Foo.lean","user":{"login":"author"}},"pull_request":{"user":{"login":"author"},"base":{"repo":{"full_name":"example/definitely-does-not-exist"},"ref":"master"},"head":{"repo":{"full_name":"example/definitely-does-not-exist"},"sha":"1111111111111111111111111111111111111111","ref":"feature","label":"author:feature"}}}},"outputs":{"base_ref":"master","committer":"github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>","author":"author <12345+author@users.noreply.github.com>"}}
 
       - name: Assert pr-author auth succeeded before later failure
         shell: bash
@@ -127,7 +127,7 @@ jobs:
           source_workflow: act-harness
           allowed_users: reviewer
           bridge_override_json: >-
-            {"file_path":"src/Foo.lean","commenter_login":"reviewer","pr_author_login":"author","pr_number":"1","review_comment_id":"1","base_ref":"master","base_repo":"example/definitely-does-not-exist","head_repo":"example/definitely-does-not-exist","head_sha":"1111111111111111111111111111111111111111","head_ref":"feature","head_label":"author:feature","committer":"github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>","author":"author <12345+author@users.noreply.github.com>"}
+            {"meta":{"schema_version":2,"repository":"leanprover-community/SpliceBot","workflow_name":"Splice Action Act Harness","workflow_run_id":"1","workflow_run_attempt":"1","event_name":"pull_request_review_comment","head_sha":"1111111111111111111111111111111111111111","created_at":"2026-03-20T00:00:00Z","pr_number":1,"event":{"comment":{"id":1,"path":"src/Foo.lean","user":{"login":"reviewer"}},"pull_request":{"user":{"login":"author"},"base":{"repo":{"full_name":"example/definitely-does-not-exist"},"ref":"master"},"head":{"repo":{"full_name":"example/definitely-does-not-exist"},"sha":"1111111111111111111111111111111111111111","ref":"feature","label":"author:feature"}}}},"outputs":{"base_ref":"master","committer":"github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>","author":"author <12345+author@users.noreply.github.com>"}}
 
       - name: Assert allowed user auth succeeded before later failure
         shell: bash

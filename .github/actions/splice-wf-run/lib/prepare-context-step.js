@@ -1,26 +1,6 @@
-const BRIDGE_FIELDS = [
-  'pr_number',
-  'review_comment_id',
-  'file_path',
-  'commenter_login',
-  'pr_author_login',
-  'base_ref',
-  'base_repo',
-  'head_repo',
-  'head_sha',
-  'head_ref',
-  'head_label',
-  'committer',
-  'author',
-];
-
 function writeOutput(key, value, outputPath) {
   const fs = require('fs');
   fs.appendFileSync(outputPath, `${key}<<__SPLICEBOT_OUTPUT__\n${value}\n__SPLICEBOT_OUTPUT__\n`);
-}
-
-function selectBridgeValue(env, field) {
-  return env[`BRIDGE_OVERRIDE_${field.toUpperCase()}`] || env[`BRIDGE_CONSUME_${field.toUpperCase()}`] || '';
 }
 
 function buildContext(env = process.env) {
@@ -45,12 +25,10 @@ function buildContext(env = process.env) {
     }
   }
 
-  const bridge = Object.fromEntries(BRIDGE_FIELDS.map((field) => [field, selectBridgeValue(env, field)]));
   return {
     token_source: tokenSource,
     authz_token_source: authzTokenSource,
     branch_token_source: branchTokenSource,
-    ...bridge,
   };
 }
 
@@ -72,6 +50,5 @@ if (require.main === module) {
 }
 
 module.exports = {
-  BRIDGE_FIELDS,
   buildContext,
 };
