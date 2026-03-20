@@ -100,6 +100,24 @@ runs:
           const run = require(process.env.ACTION_LIB_PATH);
           await run({ core, github, env: process.env });
 
+    - name: Resolve configured trigger command
+      if: steps.bridge.outputs.file_path != '' && steps.authorize_commenter.outcome == 'success'
+      id: resolve_trigger_command
+      uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+      env:
+        ACTION_LIB_PATH: ${{ github.action_path }}/lib/resolve-trigger-command-step.js
+        RAW_LABEL_COMMANDS: ${{ inputs.label_commands }}
+        TRIGGER_KEYWORD: ${{ steps.bridge.outputs.trigger_keyword }}
+        COMMENTER_LOGIN: ${{ steps.bridge.outputs.commenter_login }}
+        BASE_REPO: ${{ steps.bridge.outputs.base_repo }}
+        INPUT_TOKEN: ${{ inputs.token }}
+        AUTHZ_TOKEN: ${{ inputs.authz_token }}
+      with:
+        github-token: ${{ inputs.authz_token || inputs.token || github.token }}
+        script: |
+          const { runResolveAndAuthorizeCommandStep } = require(process.env.ACTION_LIB_PATH);
+          await runResolveAndAuthorizeCommandStep({ core, github, env: process.env });
+
     - name: Check out BASE (PR base repo @ base_ref)
       if: steps.bridge.outputs.file_path != '' && steps.authorize_commenter.outcome == 'success' && steps.resolve_trigger_command.outcome == 'success'
       id: checkout_base
@@ -185,24 +203,6 @@ runs:
           echo "NO_CHANGES=true" | tee -a "$GITHUB_OUTPUT"
           exit 0
         fi
-
-    - name: Resolve configured trigger command
-      if: steps.bridge.outputs.file_path != '' && steps.authorize_commenter.outcome == 'success'
-      id: resolve_trigger_command
-      uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
-      env:
-        ACTION_LIB_PATH: ${{ github.action_path }}/lib/resolve-trigger-command-step.js
-        RAW_LABEL_COMMANDS: ${{ inputs.label_commands }}
-        TRIGGER_KEYWORD: ${{ steps.bridge.outputs.trigger_keyword }}
-        COMMENTER_LOGIN: ${{ steps.bridge.outputs.commenter_login }}
-        BASE_REPO: ${{ steps.bridge.outputs.base_repo }}
-        INPUT_TOKEN: ${{ inputs.token }}
-        AUTHZ_TOKEN: ${{ inputs.authz_token }}
-      with:
-        github-token: ${{ inputs.authz_token || inputs.token || github.token }}
-        script: |
-          const { runResolveAndAuthorizeCommandStep } = require(process.env.ACTION_LIB_PATH);
-          await runResolveAndAuthorizeCommandStep({ core, github, env: process.env });
 
     - name: Validate create-pull-request inputs
       if: steps.bridge.outputs.file_path != '' && steps.authorize_commenter.outcome == 'success' && steps.resolve_trigger_command.outcome == 'success' && steps.branch_and_copy.outputs.NO_CHANGES != 'true' && steps.branch_and_copy.outputs.APPLY_FAILED != 'true'
