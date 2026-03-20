@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const runCommentBackStep = require('../../.github/actions/splice-wf-run/lib/comment-back-step');
+const { collectStepOutcomes } = require('../../.github/actions/splice-wf-run/lib/comment-back-step');
 
 test('comment-back step replies to the review comment when one is available', async () => {
   const replyCalls = [];
@@ -48,7 +49,7 @@ test('comment-back step replies to the review comment when one is available', as
       AUTHZ_TOKEN_SOURCE: 'inputs.authz_token',
       FORK_OWNER: '',
       FORK_OWNER_TYPE: '',
-      STEP_OUTCOMES_JSON: '[["Create Pull Request","success"]]',
+      CPR_OUTCOME: 'success',
     },
   });
 
@@ -103,7 +104,7 @@ test('comment-back step falls back to issue comments when replying fails', async
       AUTHZ_TOKEN_SOURCE: 'github.token',
       FORK_OWNER: '',
       FORK_OWNER_TYPE: '',
-      STEP_OUTCOMES_JSON: '[["Consume bridge artifact","failure"]]',
+      BRIDGE_OUTCOME: 'failure',
     },
   });
 
@@ -137,7 +138,6 @@ test('comment-back step skips cleanly when the PR number is invalid', async () =
     github,
     env: {
       ORIGINAL_PR_NUMBER: '',
-      STEP_OUTCOMES_JSON: '[]',
     },
   });
 
@@ -146,25 +146,18 @@ test('comment-back step skips cleanly when the PR number is invalid', async () =
   ]);
 });
 
-test('comment-back step rejects malformed step outcomes json', async () => {
-  await assert.rejects(
-    runCommentBackStep({
-      core: {
-        info: () => {},
-        warning: () => {},
-      },
-      github: {
-        rest: {
-          pulls: { createReplyForReviewComment: async () => {} },
-          issues: { createComment: async () => {} },
-        },
-      },
-      env: {
-        ORIGINAL_PR_NUMBER: '42',
-        REPO_FULL: 'leanprover-community/SpliceBot',
-        STEP_OUTCOMES_JSON: 'not-json',
-      },
-    }),
-    /Unexpected token|not-json/,
-  );
+test('collectStepOutcomes builds labeled outcomes from env vars', () => {
+  assert.deepEqual(collectStepOutcomes({
+    BRIDGE_OUTCOME: 'success',
+    CHECKOUT_BASE_OUTCOME: 'failure',
+    CPR_OUTCOME: 'cancelled',
+  }), [
+    ['Consume bridge artifact', 'success'],
+    ['Check out BASE', 'failure'],
+    ['Check out HEAD', ''],
+    ['Authorize commenter', ''],
+    ['Stage file changes', ''],
+    ['Validate create-pull-request inputs', ''],
+    ['Create Pull Request', 'cancelled'],
+  ]);
 });

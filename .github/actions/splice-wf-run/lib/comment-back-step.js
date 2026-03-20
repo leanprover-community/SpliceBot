@@ -1,6 +1,18 @@
 const { buildCallbackCommentPayload } = require('./comment-back');
 const { deriveTokenSources } = require('./token-sources');
 
+function collectStepOutcomes(env = process.env) {
+  return [
+    ['Consume bridge artifact', env.BRIDGE_OUTCOME || ''],
+    ['Check out BASE', env.CHECKOUT_BASE_OUTCOME || ''],
+    ['Check out HEAD', env.CHECKOUT_HEAD_OUTCOME || ''],
+    ['Authorize commenter', env.AUTHORIZE_COMMENTER_OUTCOME || ''],
+    ['Stage file changes', env.BRANCH_AND_COPY_OUTCOME || ''],
+    ['Validate create-pull-request inputs', env.VALIDATE_CPR_INPUTS_OUTCOME || ''],
+    ['Create Pull Request', env.CPR_OUTCOME || ''],
+  ];
+}
+
 module.exports = async function runCommentBackStep({ core, github, env = process.env }) {
   const { tokenSource, authzTokenSource, branchTokenSource } = deriveTokenSources(env);
   const payload = buildCallbackCommentPayload({
@@ -24,7 +36,7 @@ module.exports = async function runCommentBackStep({ core, github, env = process
     authzTokenSource,
     forkOwner: env.FORK_OWNER || '',
     forkOwnerType: env.FORK_OWNER_TYPE || '',
-    outcomes: JSON.parse(env.STEP_OUTCOMES_JSON || '[]'),
+    outcomes: collectStepOutcomes(env),
   });
 
   if (payload.skipReason) {
@@ -54,3 +66,5 @@ module.exports = async function runCommentBackStep({ core, github, env = process
     body: payload.body,
   });
 };
+
+module.exports.collectStepOutcomes = collectStepOutcomes;

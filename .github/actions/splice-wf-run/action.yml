@@ -250,8 +250,13 @@ runs:
         AUTHZ_TOKEN: ${{ inputs.authz_token }}
         PUSH_TO_FORK: ${{ inputs.push_to_fork }}
         BRANCH_TOKEN: ${{ inputs.branch_token }}
-        STEP_OUTCOMES_JSON: >-
-          [["Consume bridge artifact","${{ steps.bridge.outcome }}"],["Check out BASE","${{ steps.checkout_base.outcome }}"],["Check out HEAD","${{ steps.checkout_head.outcome }}"],["Authorize commenter","${{ steps.authorize_commenter.outcome }}"],["Stage file changes","${{ steps.branch_and_copy.outcome }}"],["Validate create-pull-request inputs","${{ steps.validate_cpr_inputs.outcome }}"],["Create Pull Request","${{ steps.cpr.outcome }}"]]
+        BRIDGE_OUTCOME: ${{ steps.bridge.outcome }}
+        CHECKOUT_BASE_OUTCOME: ${{ steps.checkout_base.outcome }}
+        CHECKOUT_HEAD_OUTCOME: ${{ steps.checkout_head.outcome }}
+        AUTHORIZE_COMMENTER_OUTCOME: ${{ steps.authorize_commenter.outcome }}
+        BRANCH_AND_COPY_OUTCOME: ${{ steps.branch_and_copy.outcome }}
+        VALIDATE_CPR_INPUTS_OUTCOME: ${{ steps.validate_cpr_inputs.outcome }}
+        CPR_OUTCOME: ${{ steps.cpr.outcome }}
       with:
         github-token: ${{ inputs.token || github.token }}
         script: |
