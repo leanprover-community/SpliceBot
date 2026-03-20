@@ -1,8 +1,11 @@
 const { authorizeCommenter } = require('./authorize-commenter');
-const { deriveTokenSources } = require('./token-sources');
 
 module.exports = async function runAuthorizeCommenterStep({ core, github, env = process.env }) {
-  const { authzTokenSource } = deriveTokenSources(env);
+  const authzTokenSource = env.AUTHZ_TOKEN
+    ? 'inputs.authz_token'
+    : env.INPUT_TOKEN
+      ? 'inputs.token'
+      : 'github.token';
   const result = await authorizeCommenter({
     allowPrAuthor: (env.ALLOW_PR_AUTHOR || 'true') === 'true',
     minRepoPermission: (env.MIN_REPO_PERMISSION || 'anyone').trim().toLowerCase(),
