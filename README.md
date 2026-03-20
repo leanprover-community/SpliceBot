@@ -143,6 +143,24 @@ tests/actions/run_act_smoke.sh
 
 That script auto-discovers all reusable-workflow event fixtures under `tests/actions/events/` and then runs the composite-action smoke harness.
 If `GITHUB_TOKEN` is set in the environment, the script passes it through to `act` as a secret.
+It also supports a few useful controls for local iteration:
+
+```bash
+# Only run reusable-workflow fixtures whose path contains "keyword"
+ACT_CASE_FILTER=keyword tests/actions/run_act_smoke.sh
+
+# Skip the composite harness
+RUN_REUSABLE_ONLY=1 tests/actions/run_act_smoke.sh
+
+# Run only the composite harness
+RUN_COMPOSITE_ONLY=1 tests/actions/run_act_smoke.sh
+
+# Override per-run timeouts and heartbeat interval
+ACT_REUSABLE_TIMEOUT_SECONDS=180 \
+ACT_COMPOSITE_TIMEOUT_SECONDS=300 \
+ACT_HEARTBEAT_SECONDS=10 \
+tests/actions/run_act_smoke.sh
+```
 
 You can also run individual harnesses directly.
 
