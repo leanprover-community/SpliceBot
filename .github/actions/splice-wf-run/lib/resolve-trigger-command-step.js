@@ -1,4 +1,5 @@
 const fs = require('fs');
+const { authorizeCommandActor } = require('./command-authorization');
 
 function normalizeList(value) {
   if (value == null) return [];
@@ -116,6 +117,69 @@ function runFromEnvironment(env = process.env) {
   }
 }
 
+async function runResolveAndAuthorizeCommandStep({ core, github, env = process.env }) {
+  const result = resolveTriggerCommand({
+    rawCommands: env.RAW_LABEL_COMMANDS || '',
+    triggerKeyword: env.TRIGGER_KEYWORD || '',
+  });
+
+  for (const [key, value] of Object.entries(result)) {
+    if (value !== undefined && value !== null && value !== false && key !== 'shouldFail') {
+      core.setOutput(key, value);
+    }
+  }
+
+  if (result.shouldFail) {
+    core.setFailed(result.resolve_error);
+    return;
+  }
+
+  if (result.trigger_mode !== 'label') {
+    return;
+  }
+
+  const authzTokenSource = env.AUTHZ_TOKEN
+    ? 'inputs.authz_token'
+    : env.INPUT_TOKEN
+      ? 'inputs.token'
+      : 'github.token';
+
+  const authz = await authorizeCommandActor({
+    commenterLogin: (env.COMMENTER_LOGIN || '').trim(),
+    baseRepo: (env.BASE_REPO || '').trim(),
+    commandName: result.label_command || '',
+    labelName: result.label_name || '',
+    minRepoPermission: (result.label_min_repo_permission || 'write').trim().toLowerCase(),
+    rawAllowedUsersJson: result.label_allowed_users_json || '[]',
+    rawAllowedTeamsJson: result.label_allowed_teams_json || '[]',
+    authzTokenSource,
+    github,
+    onInfo: (message) => core.info(message),
+  });
+
+  core.setOutput('label_authz_decision', authz.decision);
+  core.setOutput('label_authz_reason', authz.reason);
+  core.setOutput('label_authz_details', authz.details);
+  core.setOutput('label_authz_token_source', authzTokenSource);
+
+  if (authz.decision === 'allow') {
+    core.info(authz.reason);
+    core.info(authz.details);
+    return;
+  }
+
+  if (authz.decision === 'deny') {
+    core.warning(authz.reason);
+    core.info(authz.details);
+    core.setFailed(authz.reason);
+    return;
+  }
+
+  core.error(authz.reason);
+  core.info(authz.details);
+  core.setFailed(authz.reason);
+}
+
 if (require.main === module) {
   try {
     runFromEnvironment();
@@ -130,4 +194,5 @@ module.exports = {
   parseLabelCommands,
   resolveTriggerCommand,
   runFromEnvironment,
+  runResolveAndAuthorizeCommandStep,
 };

@@ -6,7 +6,6 @@ function collectStepOutcomes(env = process.env) {
     ['Consume bridge artifact', env.BRIDGE_OUTCOME || ''],
     ['Resolve configured trigger command', env.RESOLVE_TRIGGER_COMMAND_OUTCOME || ''],
     ['Authorize commenter', env.AUTHORIZE_COMMENTER_OUTCOME || ''],
-    ['Authorize label command', env.AUTHORIZE_LABEL_COMMAND_OUTCOME || ''],
     ['Check out BASE', env.CHECKOUT_BASE_OUTCOME || ''],
     ['Check out HEAD', env.CHECKOUT_HEAD_OUTCOME || ''],
     ['Stage file changes', env.BRANCH_AND_COPY_OUTCOME || ''],

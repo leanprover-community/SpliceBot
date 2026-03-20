@@ -155,7 +155,6 @@ test('collectStepOutcomes builds labeled outcomes from env vars', () => {
     ['Consume bridge artifact', 'success'],
     ['Resolve configured trigger command', ''],
     ['Authorize commenter', ''],
-    ['Authorize label command', ''],
     ['Check out BASE', 'failure'],
     ['Check out HEAD', ''],
     ['Stage file changes', ''],
