@@ -49,51 +49,6 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Resolve token sources
-      id: token_mode
-      shell: bash
-      env:
-        INPUT_TOKEN: ${{ inputs.token }}
-        PUSH_TO_FORK: ${{ inputs.push_to_fork }}
-        AUTHZ_TOKEN: ${{ inputs.authz_token }}
-        BRANCH_TOKEN: ${{ inputs.branch_token }}
-      run: |
-        set -euo pipefail
-
-        token_source=github.token
-        authz_token_source=github.token
-        branch_token_source=not-applicable
-
-        if [ -n "${INPUT_TOKEN}" ]; then
-          token_source=inputs.token
-          authz_token_source=inputs.token
-        fi
-
-        if [ -n "${AUTHZ_TOKEN}" ]; then
-          authz_token_source=inputs.authz_token
-        fi
-
-        if [ -n "${PUSH_TO_FORK}" ]; then
-          if [ -n "${BRANCH_TOKEN}" ]; then
-            branch_token_source=inputs.branch_token
-          elif [ -n "${INPUT_TOKEN}" ]; then
-            branch_token_source=inputs.token
-          else
-            branch_token_source=github.token
-          fi
-        fi
-
-        echo "token_source=${token_source}" >> "$GITHUB_OUTPUT"
-        echo "authz_token_source=${authz_token_source}" >> "$GITHUB_OUTPUT"
-        echo "branch_token_source=${branch_token_source}" >> "$GITHUB_OUTPUT"
-
-    - name: Log token source selection
-      shell: bash
-      run: |
-        echo "token source: ${{ steps.token_mode.outputs.token_source }}"
-        echo "authz-token source: ${{ steps.token_mode.outputs.authz_token_source }}"
-        echo "branch-token source: ${{ steps.token_mode.outputs.branch_token_source }}"
-
     - name: Consume bridge artifact
       if: inputs.bridge_override_json == ''
       id: bridge_consume
@@ -129,52 +84,47 @@ runs:
         set -euo pipefail
         node "${{ github.action_path }}/lib/bridge-override-step.js"
 
-    - name: Resolve bridge data
-      id: bridge
+    - name: Prepare runtime context
+      id: prepare
       shell: bash
       env:
-        PR_NUMBER: ${{ steps.bridge_override.outputs.pr_number || steps.bridge_consume.outputs.pr_number }}
-        REVIEW_COMMENT_ID: ${{ steps.bridge_override.outputs.review_comment_id || steps.bridge_consume.outputs.review_comment_id }}
-        FILE_PATH: ${{ steps.bridge_override.outputs.file_path || steps.bridge_consume.outputs.file_path }}
-        COMMENTER_LOGIN: ${{ steps.bridge_override.outputs.commenter_login || steps.bridge_consume.outputs.commenter_login }}
-        PR_AUTHOR_LOGIN: ${{ steps.bridge_override.outputs.pr_author_login || steps.bridge_consume.outputs.pr_author_login }}
-        BASE_REF: ${{ steps.bridge_override.outputs.base_ref || steps.bridge_consume.outputs.base_ref }}
-        BASE_REPO: ${{ steps.bridge_override.outputs.base_repo || steps.bridge_consume.outputs.base_repo }}
-        HEAD_REPO: ${{ steps.bridge_override.outputs.head_repo || steps.bridge_consume.outputs.head_repo }}
-        HEAD_SHA: ${{ steps.bridge_override.outputs.head_sha || steps.bridge_consume.outputs.head_sha }}
-        HEAD_REF: ${{ steps.bridge_override.outputs.head_ref || steps.bridge_consume.outputs.head_ref }}
-        HEAD_LABEL: ${{ steps.bridge_override.outputs.head_label || steps.bridge_consume.outputs.head_label }}
-        COMMITTER: ${{ steps.bridge_override.outputs.committer || steps.bridge_consume.outputs.committer }}
-        AUTHOR: ${{ steps.bridge_override.outputs.author || steps.bridge_consume.outputs.author }}
+        INPUT_TOKEN: ${{ inputs.token }}
+        PUSH_TO_FORK: ${{ inputs.push_to_fork }}
+        AUTHZ_TOKEN: ${{ inputs.authz_token }}
+        BRANCH_TOKEN: ${{ inputs.branch_token }}
+        BRIDGE_OVERRIDE_PR_NUMBER: ${{ steps.bridge_override.outputs.pr_number }}
+        BRIDGE_OVERRIDE_REVIEW_COMMENT_ID: ${{ steps.bridge_override.outputs.review_comment_id }}
+        BRIDGE_OVERRIDE_FILE_PATH: ${{ steps.bridge_override.outputs.file_path }}
+        BRIDGE_OVERRIDE_COMMENTER_LOGIN: ${{ steps.bridge_override.outputs.commenter_login }}
+        BRIDGE_OVERRIDE_PR_AUTHOR_LOGIN: ${{ steps.bridge_override.outputs.pr_author_login }}
+        BRIDGE_OVERRIDE_BASE_REF: ${{ steps.bridge_override.outputs.base_ref }}
+        BRIDGE_OVERRIDE_BASE_REPO: ${{ steps.bridge_override.outputs.base_repo }}
+        BRIDGE_OVERRIDE_HEAD_REPO: ${{ steps.bridge_override.outputs.head_repo }}
+        BRIDGE_OVERRIDE_HEAD_SHA: ${{ steps.bridge_override.outputs.head_sha }}
+        BRIDGE_OVERRIDE_HEAD_REF: ${{ steps.bridge_override.outputs.head_ref }}
+        BRIDGE_OVERRIDE_HEAD_LABEL: ${{ steps.bridge_override.outputs.head_label }}
+        BRIDGE_OVERRIDE_COMMITTER: ${{ steps.bridge_override.outputs.committer }}
+        BRIDGE_OVERRIDE_AUTHOR: ${{ steps.bridge_override.outputs.author }}
+        BRIDGE_CONSUME_PR_NUMBER: ${{ steps.bridge_consume.outputs.pr_number }}
+        BRIDGE_CONSUME_REVIEW_COMMENT_ID: ${{ steps.bridge_consume.outputs.review_comment_id }}
+        BRIDGE_CONSUME_FILE_PATH: ${{ steps.bridge_consume.outputs.file_path }}
+        BRIDGE_CONSUME_COMMENTER_LOGIN: ${{ steps.bridge_consume.outputs.commenter_login }}
+        BRIDGE_CONSUME_PR_AUTHOR_LOGIN: ${{ steps.bridge_consume.outputs.pr_author_login }}
+        BRIDGE_CONSUME_BASE_REF: ${{ steps.bridge_consume.outputs.base_ref }}
+        BRIDGE_CONSUME_BASE_REPO: ${{ steps.bridge_consume.outputs.base_repo }}
+        BRIDGE_CONSUME_HEAD_REPO: ${{ steps.bridge_consume.outputs.head_repo }}
+        BRIDGE_CONSUME_HEAD_SHA: ${{ steps.bridge_consume.outputs.head_sha }}
+        BRIDGE_CONSUME_HEAD_REF: ${{ steps.bridge_consume.outputs.head_ref }}
+        BRIDGE_CONSUME_HEAD_LABEL: ${{ steps.bridge_consume.outputs.head_label }}
+        BRIDGE_CONSUME_COMMITTER: ${{ steps.bridge_consume.outputs.committer }}
+        BRIDGE_CONSUME_AUTHOR: ${{ steps.bridge_consume.outputs.author }}
+        ACTION_LIB_PATH: ${{ github.action_path }}/lib/prepare-context-step.js
       run: |
         set -euo pipefail
-
-        write_output() {
-          local key="$1"
-          local value="$2"
-          {
-            echo "${key}<<__SPLICEBOT_OUTPUT__"
-            printf '%s\n' "${value}"
-            echo "__SPLICEBOT_OUTPUT__"
-          } >> "$GITHUB_OUTPUT"
-        }
-
-        write_output pr_number "${PR_NUMBER}"
-        write_output review_comment_id "${REVIEW_COMMENT_ID}"
-        write_output file_path "${FILE_PATH}"
-        write_output commenter_login "${COMMENTER_LOGIN}"
-        write_output pr_author_login "${PR_AUTHOR_LOGIN}"
-        write_output base_ref "${BASE_REF}"
-        write_output base_repo "${BASE_REPO}"
-        write_output head_repo "${HEAD_REPO}"
-        write_output head_sha "${HEAD_SHA}"
-        write_output head_ref "${HEAD_REF}"
-        write_output head_label "${HEAD_LABEL}"
-        write_output committer "${COMMITTER}"
-        write_output author "${AUTHOR}"
+        node "${ACTION_LIB_PATH}"
 
     - name: Authorize commenter
-      if: steps.bridge.outputs.file_path != ''
+      if: steps.prepare.outputs.file_path != ''
       id: authorize_commenter
       uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
       env:
@@ -183,10 +133,10 @@ runs:
         MIN_REPO_PERMISSION: ${{ inputs.min_repo_permission }}
         RAW_ALLOWED_TEAMS: ${{ inputs.allowed_teams }}
         RAW_ALLOWED_USERS: ${{ inputs.allowed_users }}
-        COMMENTER_LOGIN: ${{ steps.bridge.outputs.commenter_login }}
-        PR_AUTHOR_LOGIN: ${{ steps.bridge.outputs.pr_author_login }}
-        BASE_REPO: ${{ steps.bridge.outputs.base_repo }}
-        AUTHZ_TOKEN_SOURCE: ${{ steps.token_mode.outputs.authz_token_source }}
+        COMMENTER_LOGIN: ${{ steps.prepare.outputs.commenter_login }}
+        PR_AUTHOR_LOGIN: ${{ steps.prepare.outputs.pr_author_login }}
+        BASE_REPO: ${{ steps.prepare.outputs.base_repo }}
+        AUTHZ_TOKEN_SOURCE: ${{ steps.prepare.outputs.authz_token_source }}
       with:
         github-token: ${{ inputs.authz_token || inputs.token || github.token }}
         script: |
@@ -194,36 +144,36 @@ runs:
           await run({ core, github, env: process.env });
 
     - name: Check out BASE (PR base repo @ base_ref)
-      if: steps.bridge.outputs.file_path != ''
+      if: steps.prepare.outputs.file_path != ''
       id: checkout_base
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       with:
         token: ${{ inputs.token || github.token }}
-        repository: ${{ steps.bridge.outputs.base_repo }}
-        ref: ${{ steps.bridge.outputs.base_ref }}
+        repository: ${{ steps.prepare.outputs.base_repo }}
+        ref: ${{ steps.prepare.outputs.base_ref }}
         fetch-depth: 0
         path: base
 
     - name: Check out HEAD (PR head repo)
-      if: steps.bridge.outputs.file_path != ''
+      if: steps.prepare.outputs.file_path != ''
       id: checkout_head
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       with:
         token: ${{ inputs.token || github.token }}
-        repository: ${{ steps.bridge.outputs.head_repo }}
-        ref: ${{ steps.bridge.outputs.head_sha }}
+        repository: ${{ steps.prepare.outputs.head_repo }}
+        ref: ${{ steps.prepare.outputs.head_sha }}
         fetch-depth: 0
         path: head
 
     - name: Stage file changes via 3-way patch apply
-      if: steps.bridge.outputs.file_path != ''
+      if: steps.prepare.outputs.file_path != ''
       id: branch_and_copy
       shell: bash
       env:
-        FILE_PATH: ${{ steps.bridge.outputs.file_path }}
-        PR_NUMBER: ${{ steps.bridge.outputs.pr_number }}
-        BASE_REF: ${{ steps.bridge.outputs.base_ref }}
-        HEAD_SHA: ${{ steps.bridge.outputs.head_sha }}
+        FILE_PATH: ${{ steps.prepare.outputs.file_path }}
+        PR_NUMBER: ${{ steps.prepare.outputs.pr_number }}
+        BASE_REF: ${{ steps.prepare.outputs.base_ref }}
+        HEAD_SHA: ${{ steps.prepare.outputs.head_sha }}
       run: |
         set -euo pipefail
 
@@ -293,106 +243,65 @@ runs:
           await run({ core, github, env: process.env });
 
     - name: Validate create-pull-request inputs
-      if: steps.bridge.outputs.file_path != '' && steps.authorize_commenter.outcome == 'success' && steps.branch_and_copy.outputs.NO_CHANGES != 'true' && steps.branch_and_copy.outputs.APPLY_FAILED != 'true'
+      if: steps.prepare.outputs.file_path != '' && steps.authorize_commenter.outcome == 'success' && steps.branch_and_copy.outputs.NO_CHANGES != 'true' && steps.branch_and_copy.outputs.APPLY_FAILED != 'true'
       id: validate_cpr_inputs
       shell: bash
       env:
         PUSH_TO_FORK: ${{ inputs.push_to_fork }}
         MAINTAINER_CAN_MODIFY: ${{ inputs.maintainer_can_modify }}
         BRANCH_NAME: ${{ steps.branch_and_copy.outputs.BRANCH }}
-        COMMITTER: ${{ steps.bridge.outputs.committer }}
-        AUTHOR: ${{ steps.bridge.outputs.author }}
-        BRANCH_TOKEN_SOURCE: ${{ steps.token_mode.outputs.branch_token_source }}
+        COMMITTER: ${{ steps.prepare.outputs.committer }}
+        AUTHOR: ${{ steps.prepare.outputs.author }}
         FORK_OWNER_TYPE: ${{ steps.fork_owner.outputs.fork_owner_type }}
+        ACTION_LIB_PATH: ${{ github.action_path }}/lib/validate-cpr-inputs-step.js
       run: |
         set -euo pipefail
-
-        owner_repo_re='^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$'
-
-        if [ -n "${PUSH_TO_FORK}" ] && ! [[ "${PUSH_TO_FORK}" =~ ${owner_repo_re} ]]; then
-          echo "::error::Invalid push_to_fork '${PUSH_TO_FORK}'. Expected owner/repo."
-          exit 1
-        fi
-
-        if [ -n "${MAINTAINER_CAN_MODIFY}" ] && [ "${MAINTAINER_CAN_MODIFY}" != "true" ] && [ "${MAINTAINER_CAN_MODIFY}" != "false" ]; then
-          echo "::error::Invalid maintainer_can_modify '${MAINTAINER_CAN_MODIFY}'. Expected 'true', 'false', or empty."
-          exit 1
-        fi
-
-        if [ "${MAINTAINER_CAN_MODIFY}" = "true" ] && [ "${FORK_OWNER_TYPE}" = "Organization" ]; then
-          echo "::error::maintainer_can_modify=true is not supported for organization-owned forks. Use a user-owned fork or set maintainer_can_modify to 'false'."
-          exit 1
-        fi
-        if [ "${MAINTAINER_CAN_MODIFY}" = "true" ] && [ -n "${PUSH_TO_FORK}" ] && [ "${FORK_OWNER_TYPE}" = "Unknown" ]; then
-          echo "::warning::Could not determine push_to_fork owner type. If this is an organization-owned fork, maintainer_can_modify=true may fail."
-        fi
-
-        if ! git check-ref-format --branch "${BRANCH_NAME}" >/dev/null 2>&1; then
-          echo "::error::Generated branch name is invalid: '${BRANCH_NAME}'."
-          exit 1
-        fi
-
-        if [ "${#BRANCH_NAME}" -gt 220 ]; then
-          echo "::error::Generated branch name is too long (${#BRANCH_NAME} chars). This indicates a branch generation bug."
-          exit 1
-        fi
-
-        name_email_re='^.+ <[^<>[:space:]]+@[^<>[:space:]]+>$'
-
-        if [ -n "${COMMITTER}" ] && ! [[ "${COMMITTER}" =~ ${name_email_re} ]]; then
-          echo "::error::Invalid committer format '${COMMITTER}'. Expected 'Name <email@address>'."
-          exit 1
-        fi
-
-        if [ -n "${AUTHOR}" ] && ! [[ "${AUTHOR}" =~ ${name_email_re} ]]; then
-          echo "::error::Invalid author format '${AUTHOR}'. Expected 'Name <email@address>'."
-          exit 1
-        fi
+        node "${ACTION_LIB_PATH}"
 
     - name: Create Pull Request
-      if: steps.bridge.outputs.file_path != '' && steps.authorize_commenter.outcome == 'success' && steps.branch_and_copy.outputs.NO_CHANGES != 'true' && steps.branch_and_copy.outputs.APPLY_FAILED != 'true' && steps.validate_cpr_inputs.outcome == 'success'
+      if: steps.prepare.outputs.file_path != '' && steps.authorize_commenter.outcome == 'success' && steps.branch_and_copy.outputs.NO_CHANGES != 'true' && steps.branch_and_copy.outputs.APPLY_FAILED != 'true' && steps.validate_cpr_inputs.outcome == 'success'
       id: cpr
       uses: peter-evans/create-pull-request@98357b18bf14b5342f975ff684046ec3b2a07725 #v8.0.0
       with:
-        committer: ${{ steps.bridge.outputs.committer }}
-        author: ${{ steps.bridge.outputs.author }}
+        committer: ${{ steps.prepare.outputs.committer }}
+        author: ${{ steps.prepare.outputs.author }}
         path: base
-        base: ${{ steps.bridge.outputs.base_ref }}
+        base: ${{ steps.prepare.outputs.base_ref }}
         token: ${{ inputs.token || github.token }}
         # Fork-only options: when push_to_fork is empty, these resolve to empty strings and CPR uses base-repo branch mode.
         branch-token: ${{ inputs.push_to_fork != '' && (inputs.branch_token || inputs.token || github.token) || '' }}
         push-to-fork: ${{ inputs.push_to_fork != '' && inputs.push_to_fork || '' }}
         # CPR expects a strict boolean; treat any non-"true" value as false.
         maintainer-can-modify: ${{ inputs.maintainer_can_modify == 'true' }}
-        commit-message: "Automated addition of changes in ${{ steps.bridge.outputs.file_path }}"
-        title: "chore(${{ steps.bridge.outputs.file_path }}): automated extraction"
+        commit-message: "Automated addition of changes in ${{ steps.prepare.outputs.file_path }}"
+        title: "chore(${{ steps.prepare.outputs.file_path }}): automated extraction"
         body: >-
-          This PR was automatically created from PR #${{ steps.bridge.outputs.pr_number }}
-          by @${{ steps.bridge.outputs.pr_author_login }} via a
-          [review comment](${{ github.server_url }}/${{ steps.bridge.outputs.base_repo }}/pull/${{ steps.bridge.outputs.pr_number }}#discussion_r${{ steps.bridge.outputs.review_comment_id }})
-          by @${{ steps.bridge.outputs.commenter_login }}.
+          This PR was automatically created from PR #${{ steps.prepare.outputs.pr_number }}
+          by @${{ steps.prepare.outputs.pr_author_login }} via a
+          [review comment](${{ github.server_url }}/${{ steps.prepare.outputs.base_repo }}/pull/${{ steps.prepare.outputs.pr_number }}#discussion_r${{ steps.prepare.outputs.review_comment_id }})
+          by @${{ steps.prepare.outputs.commenter_login }}.
         branch: ${{ steps.branch_and_copy.outputs.BRANCH }}
         branch-suffix: random
         delete-branch: true
 
     - name: Comment back on the original PR
-      if: always() && steps.bridge.outputs.pr_number != ''
+      if: always() && steps.prepare.outputs.pr_number != ''
       uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
       env:
         ACTION_LIB_PATH: ${{ github.action_path }}/lib/comment-back-step.js
-        ORIGINAL_PR_NUMBER: ${{ steps.bridge.outputs.pr_number }}
-        REVIEW_COMMENT_ID: ${{ steps.bridge.outputs.review_comment_id }}
-        REPO_FULL: ${{ steps.bridge.outputs.base_repo }}
-        FILE_PATH: ${{ steps.bridge.outputs.file_path }}
+        ORIGINAL_PR_NUMBER: ${{ steps.prepare.outputs.pr_number }}
+        REVIEW_COMMENT_ID: ${{ steps.prepare.outputs.review_comment_id }}
+        REPO_FULL: ${{ steps.prepare.outputs.base_repo }}
+        FILE_PATH: ${{ steps.prepare.outputs.file_path }}
         APPLY_FAILED: ${{ steps.branch_and_copy.outputs.APPLY_FAILED }}
         NO_CHANGES: ${{ steps.branch_and_copy.outputs.NO_CHANGES }}
         AUTOMATED_PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
-        BASE_REF: ${{ steps.bridge.outputs.base_ref }}
-        HEAD_REF: ${{ steps.bridge.outputs.head_ref }}
-        HEAD_LABEL: ${{ steps.bridge.outputs.head_label }}
+        BASE_REF: ${{ steps.prepare.outputs.base_ref }}
+        HEAD_REF: ${{ steps.prepare.outputs.head_ref }}
+        HEAD_LABEL: ${{ steps.prepare.outputs.head_label }}
         RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}
-        TOKEN_SOURCE: ${{ steps.token_mode.outputs.token_source }}
-        BRANCH_TOKEN_SOURCE: ${{ steps.token_mode.outputs.branch_token_source }}
+        TOKEN_SOURCE: ${{ steps.prepare.outputs.token_source }}
+        BRANCH_TOKEN_SOURCE: ${{ steps.prepare.outputs.branch_token_source }}
         AUTHZ_OUTCOME: ${{ steps.authorize_commenter.outcome }}
         AUTHZ_DECISION: ${{ steps.authorize_commenter.outputs.authz_decision }}
         AUTHZ_REASON: ${{ steps.authorize_commenter.outputs.authz_reason }}
@@ -401,7 +310,7 @@ runs:
         FORK_OWNER: ${{ steps.fork_owner.outputs.fork_owner }}
         FORK_OWNER_TYPE: ${{ steps.fork_owner.outputs.fork_owner_type }}
         STEP_OUTCOMES_JSON: >-
-          [["Consume bridge artifact","${{ steps.bridge.outcome }}"],["Check out BASE","${{ steps.checkout_base.outcome }}"],["Check out HEAD","${{ steps.checkout_head.outcome }}"],["Authorize commenter","${{ steps.authorize_commenter.outcome }}"],["Stage file changes","${{ steps.branch_and_copy.outcome }}"],["Detect push_to_fork owner type","${{ steps.fork_owner.outcome }}"],["Validate create-pull-request inputs","${{ steps.validate_cpr_inputs.outcome }}"],["Create Pull Request","${{ steps.cpr.outcome }}"]]
+          [["Consume bridge artifact","${{ steps.bridge_consume.outcome }}"],["Prepare runtime context","${{ steps.prepare.outcome }}"],["Check out BASE","${{ steps.checkout_base.outcome }}"],["Check out HEAD","${{ steps.checkout_head.outcome }}"],["Authorize commenter","${{ steps.authorize_commenter.outcome }}"],["Stage file changes","${{ steps.branch_and_copy.outcome }}"],["Detect push_to_fork owner type","${{ steps.fork_owner.outcome }}"],["Validate create-pull-request inputs","${{ steps.validate_cpr_inputs.outcome }}"],["Create Pull Request","${{ steps.cpr.outcome }}"]]
       with:
         github-token: ${{ inputs.token || github.token }}
         script: |
