@@ -1,4 +1,4 @@
-# `splice-bot`: split part of a PR into a separate PR
+# `splice-bt`: split part of a PR into a separate PR
 
 SpliceBot creates a **single-file pull request** from an existing PR when a reviewer requests it in a review comment.
 
