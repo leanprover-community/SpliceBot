@@ -116,6 +116,38 @@ test('returns an error when bridge fields are missing', async () => {
   assert.match(result.details, /pr_author_login: \(missing\)/);
 });
 
+test('disabled permission mode only allows explicit allow rules', async () => {
+  const github = {
+    rest: {
+      repos: {
+        getCollaboratorPermissionLevel: async () => {
+          throw new Error('should not be called');
+        },
+      },
+      teams: {
+        getMembershipForUserInOrg: async () => {
+          throw new Error('should not be called');
+        },
+      },
+    },
+  };
+
+  const result = await authorizeCommenter({
+    allowPrAuthor: false,
+    minRepoPermission: 'disabled',
+    commenterLogin: 'reviewer',
+    prAuthorLogin: 'author',
+    baseRepo: 'leanprover-community/SpliceBot',
+    rawAllowedTeams: '',
+    rawAllowedUsers: '',
+    authzTokenSource: 'github.token',
+    github,
+  });
+
+  assert.equal(result.decision, 'deny');
+  assert.match(result.reason, /not authorized/);
+});
+
 test('treats collaborator permission 404 as none and denies when threshold is unmet', async () => {
   const github = createGithubStub({
     repos: {

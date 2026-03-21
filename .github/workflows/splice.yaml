@@ -79,7 +79,8 @@ jobs:
             }
 
             const triggerKeyword = triggerLine.replace(/^splice-bot\b/i, "").trim().split(/\s+/)[0] || "";
-            core.info(`Trigger keyword: ${triggerKeyword || "(none)"}`);
+            const normalizedTriggerKeyword = triggerKeyword.toLowerCase();
+            core.info(`Trigger keyword: ${normalizedTriggerKeyword || "(none)"}`);
 
             const path = comment?.path;
             if (!path) {
@@ -119,7 +120,7 @@ jobs:
             core.setOutput("skip", "false");
             // IMPORTANT: base_ref now comes from the reusable workflow input (default master)
             core.setOutput("base_ref", baseRefFromInput);
-            core.setOutput("trigger_keyword", triggerKeyword);
+            core.setOutput("trigger_keyword", normalizedTriggerKeyword);
 
       - if: ${{ steps.extract.outputs.skip != 'true' && inputs.emit_bridge_artifact }}
         name: Prepare bridge outputs

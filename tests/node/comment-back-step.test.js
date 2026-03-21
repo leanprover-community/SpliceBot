@@ -153,9 +153,10 @@ test('collectStepOutcomes builds labeled outcomes from env vars', () => {
     CPR_OUTCOME: 'cancelled',
   }), [
     ['Consume bridge artifact', 'success'],
+    ['Resolve configured trigger command', ''],
+    ['Authorize commenter', ''],
     ['Check out BASE', 'failure'],
     ['Check out HEAD', ''],
-    ['Authorize commenter', ''],
     ['Stage file changes', ''],
     ['Validate create-pull-request inputs', ''],
     ['Create Pull Request', 'cancelled'],
