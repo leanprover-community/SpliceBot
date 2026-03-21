@@ -1,0 +1,31 @@
+{
+  "comment": {
+    "body": "Please mark this ready.\n\nsplice-bot READY",
+    "id": 111,
+    "path": "src/Foo.lean",
+    "user": {
+      "login": "reviewer"
+    }
+  },
+  "pull_request": {
+    "number": 52,
+    "user": {
+      "login": "author",
+      "id": 12345
+    },
+    "base": {
+      "sha": "1515151515151515151515151515151515151515",
+      "repo": {
+        "full_name": "leanprover-community/SpliceBot"
+      }
+    },
+    "head": {
+      "sha": "1616161616161616161616161616161616161616",
+      "ref": "feature-branch",
+      "label": "author:feature-branch",
+      "repo": {
+        "full_name": "leanprover-community/SpliceBot"
+      }
+    }
+  }
+}

@@ -34,3 +34,17 @@ jobs:
           # authz_token: ${{ secrets.SPLICE_BOT_AUTHZ_TOKEN }}
           # Optional separate branch push token for fork mode.
           branch_token: ${{ steps.branch-token.outputs.token }}
+          label_commands: >-
+            [
+              {
+                "command": "ready",
+                "label": "ready-to-merge",
+                "min_repo_permission": "write",
+              },
+              {
+                "command": "blocked",
+                "label": "blocked",
+                "min_repo_permission": "maintain",
+                "allowed_teams": ["leanprover-community/reviewers"]
+              }
+            ]

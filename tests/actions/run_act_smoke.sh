@@ -104,12 +104,31 @@ run_act_with_log() {
     fi
     if grep -F "error getting credentials" "$log_file" >/dev/null 2>&1; then
       echo "Hint: this looks like a Docker credential-helper problem while pulling the act runner image." >&2
-      echo "Hint: try `docker pull catthehacker/ubuntu:act-latest` manually, or run with a clean Docker config." >&2
+      echo "Hint: try \`docker pull catthehacker/ubuntu:act-latest\` manually, or run with a clean Docker config." >&2
     fi
     return 1
   fi
 
   echo "==> Completed: ${case_name} (${elapsed}s)"
+}
+
+summarize_act_failure() {
+  local log_file="$1"
+
+  if grep -F "🏁  Job " "$log_file" >/dev/null 2>&1; then
+    echo "Act job summary:" >&2
+    grep -F "🏁  Job " "$log_file" >&2 || true
+  fi
+
+  if grep -F "Error: Job '" "$log_file" >/dev/null 2>&1; then
+    echo "Act reported failed jobs:" >&2
+    grep -F "Error: Job '" "$log_file" >&2 || true
+  fi
+
+  if grep -F "  ❌  Failure - " "$log_file" >/dev/null 2>&1; then
+    echo "Failing step lines:" >&2
+    grep -F "  ❌  Failure - " "$log_file" >&2 || true
+  fi
 }
 
 if [ "$run_composite_only" != "1" ]; then
@@ -136,6 +155,7 @@ if [ "$run_composite_only" != "1" ]; then
     while IFS= read -r expected_marker || [ -n "$expected_marker" ]; do
       [ -z "$expected_marker" ] && continue
       if ! tests/actions/assert/log_contains.sh "$log_file" "$expected_marker"; then
+        summarize_act_failure "$log_file"
         echo "Reusable smoke case log:" >&2
         echo "--- begin act log ---" >&2
         cat "$log_file" >&2
@@ -157,5 +177,9 @@ if [ "$run_reusable_only" != "1" ]; then
     act_args+=(--secret GITHUB_TOKEN)
   fi
   act_args+=(workflow_dispatch)
-  run_act_with_log "composite action smoke harness" "$composite_log_file" "$composite_timeout_seconds" "${act_args[@]}"
+  if ! run_act_with_log "composite action smoke harness" "$composite_log_file" "$composite_timeout_seconds" "${act_args[@]}"; then
+    echo "Composite action harness failed. The harness runs jobs in parallel, so individual job success lines may appear even when another job failed." >&2
+    summarize_act_failure "$composite_log_file"
+    exit 1
+  fi
 fi
