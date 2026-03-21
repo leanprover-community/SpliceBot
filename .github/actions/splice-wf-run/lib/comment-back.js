@@ -174,10 +174,10 @@ function buildCommentBody({
     tokenDiagnostics.push(`- label authz token source: \`${labelAuthzTokenSource}\``);
   }
 
-  const tokenDiagnosticsBlock = tokenDiagnostics.join('\n');
+  const tokenDiagnosticsBlock = `<details>\n<summary>Token diagnostics</summary>\n\n${tokenDiagnostics.join('\n')}\n</details>`;
   const stepOutcomesDetails = `<details>\n<summary>Step outcomes</summary>\n\n${outcomeLines}\n</details>`;
   const successBody = `**${title}**\n\n${bodyIntro}`;
-  const failureBody = `**${title}**\n\n${bodyIntro}${failedStepsLine}\n\nAdvice:\n${adviceBlock}\n\nToken diagnostics:\n${tokenDiagnosticsBlock}\n\nRun logs: ${runUrl}\n\n${stepOutcomesDetails}`;
+  const failureBody = `**${title}**\n\n${bodyIntro}${failedStepsLine}\n\nAdvice:\n${adviceBlock}\n\nRun logs: ${runUrl}\n\n${stepOutcomesDetails}\n\n${tokenDiagnosticsBlock}`;
 
   const wasSuccessful = Boolean(automatedPrNumber);
   return wasSuccessful ? successBody : failureBody;
