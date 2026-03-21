@@ -1,0 +1,136 @@
+name: Splice Action Act Harness
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  invalid-bridge-override-json:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Run invalid bridge override case
+        id: invalid_bridge_override
+        continue-on-error: true
+        uses: ./.github/actions/splice-wf-run
+        with:
+          source_workflow: act-harness
+          bridge_override_json: >-
+            ["not","an","object"]
+
+      - name: Assert invalid bridge override failed
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ "${{ steps.invalid_bridge_override.outcome }}" = "failure" ]
+
+  invalid-min-repo-permission:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Run invalid permission case
+        id: invalid_permission
+        continue-on-error: true
+        uses: ./.github/actions/splice-wf-run
+        with:
+          source_workflow: act-harness
+          min_repo_permission: bogus
+          bridge_override_json: >-
+            {"meta":{"schema_version":2,"repository":"leanprover-community/SpliceBot","workflow_name":"Splice Action Act Harness","workflow_run_id":"1","workflow_run_attempt":"1","event_name":"pull_request_review_comment","head_sha":"1111111111111111111111111111111111111111","created_at":"2026-03-20T00:00:00Z","pr_number":1,"event":{"comment":{"id":1,"path":"src/Foo.lean","user":{"login":"reviewer"}},"pull_request":{"user":{"login":"author"},"base":{"repo":{"full_name":"leanprover-community/SpliceBot"},"ref":"master"},"head":{"repo":{"full_name":"leanprover-community/SpliceBot"},"sha":"1111111111111111111111111111111111111111","ref":"feature","label":"author:feature"}}}},"outputs":{"base_ref":"master","committer":"github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>","author":"author <12345+author@users.noreply.github.com>"}}
+
+      - name: Assert invalid permission failed
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ "${{ steps.invalid_permission.outcome }}" = "failure" ]
+
+  invalid-base-repo-format:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Run invalid base repo format case
+        id: invalid_base_repo
+        continue-on-error: true
+        uses: ./.github/actions/splice-wf-run
+        with:
+          source_workflow: act-harness
+          bridge_override_json: >-
+            {"meta":{"schema_version":2,"repository":"leanprover-community/SpliceBot","workflow_name":"Splice Action Act Harness","workflow_run_id":"1","workflow_run_attempt":"1","event_name":"pull_request_review_comment","head_sha":"1111111111111111111111111111111111111111","created_at":"2026-03-20T00:00:00Z","pr_number":1,"event":{"comment":{"id":1,"path":"src/Foo.lean","user":{"login":"reviewer"}},"pull_request":{"user":{"login":"author"},"base":{"repo":{"full_name":"not-a-repo"},"ref":"master"},"head":{"repo":{"full_name":"leanprover-community/SpliceBot"},"sha":"1111111111111111111111111111111111111111","ref":"feature","label":"author:feature"}}}},"outputs":{"base_ref":"master","committer":"github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>","author":"author <12345+author@users.noreply.github.com>"}}
+
+      - name: Assert invalid base repo format failed
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ "${{ steps.invalid_base_repo.outcome }}" = "failure" ]
+
+  missing-bridge-data:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Run missing bridge data case
+        id: missing_bridge
+        continue-on-error: true
+        uses: ./.github/actions/splice-wf-run
+        with:
+          source_workflow: act-harness
+          bridge_override_json: >-
+            {"meta":{"schema_version":2,"repository":"leanprover-community/SpliceBot","workflow_name":"Splice Action Act Harness","workflow_run_id":"1","workflow_run_attempt":"1","event_name":"pull_request_review_comment","head_sha":"1111111111111111111111111111111111111111","created_at":"2026-03-20T00:00:00Z","pr_number":1,"event":{"comment":{"id":1,"path":"src/Foo.lean","user":{"login":"reviewer"}},"pull_request":{"base":{"repo":{"full_name":"leanprover-community/SpliceBot"},"ref":"master"},"head":{"repo":{"full_name":"leanprover-community/SpliceBot"},"sha":"1111111111111111111111111111111111111111","ref":"feature","label":"author:feature"}}}},"outputs":{"base_ref":"master","committer":"github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>","author":"author <12345+author@users.noreply.github.com>"}}
+
+      - name: Assert missing bridge data failed
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ "${{ steps.missing_bridge.outcome }}" = "failure" ]
+
+  authorized-pr-author-then-checkout-fails:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Run pr-author authorization success case
+        id: pr_author_checkout_failure
+        continue-on-error: true
+        uses: ./.github/actions/splice-wf-run
+        with:
+          source_workflow: act-harness
+          allow_pr_author: 'true'
+          bridge_override_json: >-
+            {"meta":{"schema_version":2,"repository":"leanprover-community/SpliceBot","workflow_name":"Splice Action Act Harness","workflow_run_id":"1","workflow_run_attempt":"1","event_name":"pull_request_review_comment","head_sha":"1111111111111111111111111111111111111111","created_at":"2026-03-20T00:00:00Z","pr_number":1,"event":{"comment":{"id":1,"path":"src/Foo.lean","user":{"login":"author"}},"pull_request":{"user":{"login":"author"},"base":{"repo":{"full_name":"example/definitely-does-not-exist"},"ref":"master"},"head":{"repo":{"full_name":"example/definitely-does-not-exist"},"sha":"1111111111111111111111111111111111111111","ref":"feature","label":"author:feature"}}}},"outputs":{"base_ref":"master","committer":"github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>","author":"author <12345+author@users.noreply.github.com>"}}
+
+      - name: Assert pr-author auth succeeded before later failure
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ "${{ steps.pr_author_checkout_failure.outcome }}" = "failure" ]
+
+  allowed-user-then-checkout-fails:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Run allowed user authorization success case
+        id: allowed_user_checkout_failure
+        continue-on-error: true
+        uses: ./.github/actions/splice-wf-run
+        with:
+          source_workflow: act-harness
+          allowed_users: reviewer
+          bridge_override_json: >-
+            {"meta":{"schema_version":2,"repository":"leanprover-community/SpliceBot","workflow_name":"Splice Action Act Harness","workflow_run_id":"1","workflow_run_attempt":"1","event_name":"pull_request_review_comment","head_sha":"1111111111111111111111111111111111111111","created_at":"2026-03-20T00:00:00Z","pr_number":1,"event":{"comment":{"id":1,"path":"src/Foo.lean","user":{"login":"reviewer"}},"pull_request":{"user":{"login":"author"},"base":{"repo":{"full_name":"example/definitely-does-not-exist"},"ref":"master"},"head":{"repo":{"full_name":"example/definitely-does-not-exist"},"sha":"1111111111111111111111111111111111111111","ref":"feature","label":"author:feature"}}}},"outputs":{"base_ref":"master","committer":"github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>","author":"author <12345+author@users.noreply.github.com>"}}
+
+      - name: Assert allowed user auth succeeded before later failure
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ "${{ steps.allowed_user_checkout_failure.outcome }}" = "failure" ]

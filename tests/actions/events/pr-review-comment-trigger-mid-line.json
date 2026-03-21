@@ -1,0 +1,31 @@
+{
+  "comment": {
+    "body": "Please run splice-bot here, thanks.",
+    "id": 107,
+    "path": "src/Foo.lean",
+    "user": {
+      "login": "reviewer"
+    }
+  },
+  "pull_request": {
+    "number": 48,
+    "user": {
+      "login": "author",
+      "id": 12345
+    },
+    "base": {
+      "sha": "dddddddddddddddddddddddddddddddddddddddd",
+      "repo": {
+        "full_name": "leanprover-community/SpliceBot"
+      }
+    },
+    "head": {
+      "sha": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "ref": "feature-branch",
+      "label": "author:feature-branch",
+      "repo": {
+        "full_name": "leanprover-community/SpliceBot"
+      }
+    }
+  }
+}
