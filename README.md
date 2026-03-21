@@ -132,72 +132,9 @@ jobs:
           # branch_token: ${{ secrets.SPLICE_BOT_FORK_TOKEN }}
 ```
 
-## Local `act` smoke tests
-
-You can run the lightweight workflow smoke tests locally with [`act`](https://github.com/nektos/act).
-These tests exercise the reusable trigger workflow against canned review-comment payloads and intentionally skip bridge-artifact emission.
-The composite-action smoke harness uses the internal test-only `bridge_override_json` input; that input exists only for local/CI testing and is not part of the supported public API.
-
-Prerequisites:
-
-- `act` installed locally
-- Docker running
-- `GITHUB_TOKEN` available if the workflow under test needs it, for example:
-  `export GITHUB_TOKEN="$(gh auth token)"`
-
-Run all local `act` smoke tests:
-
-```bash
-tests/actions/run_act_smoke.sh
-```
-
-That script auto-discovers all reusable-workflow event fixtures under `tests/actions/events/` and then runs the composite-action smoke harness.
-If `GITHUB_TOKEN` is set in the environment, the script passes it through to `act` as a secret.
-It also supports a few useful controls for local iteration:
-
-```bash
-# Only run reusable-workflow fixtures whose path contains "keyword"
-ACT_CASE_FILTER=keyword tests/actions/run_act_smoke.sh
-
-# Skip the composite harness
-RUN_REUSABLE_ONLY=1 tests/actions/run_act_smoke.sh
-
-# Run only the composite harness
-RUN_COMPOSITE_ONLY=1 tests/actions/run_act_smoke.sh
-
-# Override per-run timeouts and heartbeat interval
-ACT_REUSABLE_TIMEOUT_SECONDS=180 \
-ACT_COMPOSITE_TIMEOUT_SECONDS=300 \
-ACT_HEARTBEAT_SECONDS=10 \
-tests/actions/run_act_smoke.sh
-```
-
-You can also run individual harnesses directly.
-
-Example commands:
-
-```bash
-act \
-  --workflows tests/actions/workflows/splice_harness.yaml \
-  --eventpath tests/actions/events/pr-review-comment-basic.json \
-  pull_request_review_comment
-```
-
-```bash
-act \
-  --workflows tests/actions/workflows/splice_harness.yaml \
-  --eventpath tests/actions/events/pr-review-comment-keyword.json \
-  pull_request_review_comment
-```
-
-The canned event payloads live under `tests/actions/events/`.
-The CI workflow that runs the same smoke harness is `.github/workflows/act_smoke.yaml`.
-The reusable trigger harness lives at `tests/actions/workflows/splice_harness.yaml`.
-There is also a composite-action harness at `tests/actions/workflows/splice_action_harness.yaml` for deterministic non-network failure cases.
-
 ## Configured label commands
 
-When a trigger line is `splice-bot <keyword>`, SpliceBot checks `label_commands` before running the default split-PR flow.
+When a trigger line is `splice-bot <keyword>`, SpliceBot checks `label_commands` in the `splice-wf-run` action before running the default split-PR flow.
 If the keyword matches a configured command, it still creates the split PR and then applies the configured label to the generated PR.
 
 Each command object supports:
@@ -428,3 +365,66 @@ Example caller workflows:
 
 - `.github/workflows/add_splice_bot.yaml`
 - `.github/workflows/add_splice_bot_wf_run.yaml`
+
+## Local `act` smoke tests
+
+You can run the lightweight workflow smoke tests locally with [`act`](https://github.com/nektos/act).
+These tests exercise the reusable trigger workflow against canned review-comment payloads and intentionally skip bridge-artifact emission.
+The composite-action smoke harness uses the internal test-only `bridge_override_json` input; that input exists only for local/CI testing and is not part of the supported public API.
+
+Prerequisites:
+
+- `act` installed locally
+- Docker running
+- `GITHUB_TOKEN` available if the workflow under test needs it, for example:
+  `export GITHUB_TOKEN="$(gh auth token)"`
+
+Run all local `act` smoke tests:
+
+```bash
+tests/actions/run_act_smoke.sh
+```
+
+That script auto-discovers all reusable-workflow event fixtures under `tests/actions/events/` and then runs the composite-action smoke harness.
+If `GITHUB_TOKEN` is set in the environment, the script passes it through to `act` as a secret.
+It also supports a few useful controls for local iteration:
+
+```bash
+# Only run reusable-workflow fixtures whose path contains "keyword"
+ACT_CASE_FILTER=keyword tests/actions/run_act_smoke.sh
+
+# Skip the composite harness
+RUN_REUSABLE_ONLY=1 tests/actions/run_act_smoke.sh
+
+# Run only the composite harness
+RUN_COMPOSITE_ONLY=1 tests/actions/run_act_smoke.sh
+
+# Override per-run timeouts and heartbeat interval
+ACT_REUSABLE_TIMEOUT_SECONDS=180 \
+ACT_COMPOSITE_TIMEOUT_SECONDS=300 \
+ACT_HEARTBEAT_SECONDS=10 \
+tests/actions/run_act_smoke.sh
+```
+
+You can also run individual harnesses directly.
+
+Example commands:
+
+```bash
+act \
+  --workflows tests/actions/workflows/splice_harness.yaml \
+  --eventpath tests/actions/events/pr-review-comment-basic.json \
+  pull_request_review_comment
+```
+
+```bash
+act \
+  --workflows tests/actions/workflows/splice_harness.yaml \
+  --eventpath tests/actions/events/pr-review-comment-keyword.json \
+  pull_request_review_comment
+```
+
+The canned event payloads live under `tests/actions/events/`.
+The CI workflow that runs the same smoke harness is `.github/workflows/act_smoke.yaml`.
+The reusable trigger harness lives at `tests/actions/workflows/splice_harness.yaml`.
+There is also a composite-action harness at `tests/actions/workflows/splice_action_harness.yaml` for deterministic non-network failure cases.
