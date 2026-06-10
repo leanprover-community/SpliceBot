@@ -76,7 +76,7 @@ function resolveTriggerCommand({ rawCommands, triggerKeyword }) {
     commands = parseLabelCommands(rawCommands);
   } catch (error) {
     return {
-      trigger_mode: error.message === 'label_commands must parse to an array.' ? 'invalid' : 'invalid',
+      trigger_mode: 'invalid',
       resolve_error: error.message.startsWith('label_commands')
         ? error.message
         : `Could not parse label_commands: ${error.message}`,

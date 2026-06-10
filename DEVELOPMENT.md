@@ -122,4 +122,9 @@ act \
 The canned event payloads live under `tests/actions/events/`; each `*.json` fixture has a sibling `*.expected` file containing a log marker that must appear in the run output.
 The CI workflow that runs the same smoke harness (plus the node unit tests) is `.github/workflows/act_smoke.yaml`.
 The reusable trigger harness lives at `tests/actions/workflows/splice_harness.yaml`.
-There is also a composite-action harness at `tests/actions/workflows/splice_action_harness.yaml` for deterministic non-network failure cases.
+
+There is also a composite-action harness at `tests/actions/workflows/splice_action_harness.yaml`.
+Each job feeds the action a canned `bridge_override_json` and asserts (in-workflow) that the action ends in failure, since these are all bad-input cases.
+Because `outcome == failure` alone cannot tell whether a job failed at the stage its name claims or died earlier, `run_act_smoke.sh` also checks `tests/actions/workflows/splice_action_harness.expected`.
+That file lists `<job-name> :: <log marker>` pairs; the runner asserts each marker appears on a log line tagged with that job (act prefixes every line with the job name), which pins each job to the stage it is meant to exercise.
+Most jobs fail without network access (bad bridge data, unauthorized commenter, invalid label config); the cases whose names say they reach the split flow intentionally proceed until they fail checking out a nonexistent base repository.

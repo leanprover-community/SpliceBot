@@ -211,6 +211,7 @@ Behavior notes:
 - Label commands may use command-specific `allowed_users`, `allowed_teams`, and `min_repo_permission`.
 - Command-specific rules are checked in addition to the normal top-level authorization rules.
 - When a command matches, the configured label (if any) is applied to the generated split PR after creation, and the configured comment (if any) is posted on it.
+- The label and comment are attempted independently: if applying the label fails, the configured comment is still posted (and vice versa). The callback comment reports whichever action(s) failed.
 - If the label cannot be applied (for example, missing `issues: write`), the split PR still exists; the run fails and the callback comment reports `Failed to apply label`.
 - If the comment cannot be posted, the split PR (and any applied label) still exists; the run fails and the callback comment reports `Failed to post comment on split PR`.
 - Comments are posted by the account behind the `token` input (or `github.token`). Downstream automation triggered by such comments sees that account as the comment author, not the reviewer who ran the command — include `{commenter}` in the template when the human requester matters.
@@ -306,9 +307,12 @@ A commenter is authorized if **any** configured rule matches:
 3. Commenter meets `min_repo_permission` (`disabled`, `anyone`, `triage`, `write`, `maintain`, `admin`)
 4. Commenter is an active member of one of `allowed_teams`
 
+> [!IMPORTANT]
+> The rules are an **allow-list union**: any matching rule authorizes the commenter. The default `min_repo_permission` is `anyone`, which matches everyone, so on the defaults `allowed_users`/`allowed_teams` add nothing and do **not** restrict who can trigger. To actually limit triggering to your allowlists, set `min_repo_permission` to `disabled` (and set `allow_pr_author: false` if PR authors should not get an automatic pass).
+
 Notes:
 
-- `min_repo_permission: anyone` preserves open trigger behavior.
+- `min_repo_permission: anyone` preserves open trigger behavior (and, being the default, means a configured `allowed_users`/`allowed_teams` allowlist does not narrow access on its own — see the note above).
 - `min_repo_permission: disabled` turns off repo-permission authorization entirely, so only PR-author, user allowlist, and team allowlist rules can authorize.
 - Team checks require org-owned repositories and readable team metadata.
 - Authorization checks are fail-closed: lookup/config errors stop execution.

@@ -8,6 +8,9 @@ on:
 permissions:
   actions: read
   contents: write
+  # issues: write is required because this workflow configures label_commands;
+  # applying a label goes through the issues API.
+  issues: write
   pull-requests: write
 
 jobs:

@@ -275,7 +275,9 @@ runs:
           await run({ core, github, env: process.env });
 
     - name: Post comment on split PR
-      if: steps.cpr.outcome == 'success' && steps.resolve_trigger_command.outputs.trigger_mode == 'label' && steps.resolve_trigger_command.outputs.comment_template != '' && steps.cpr.outputs.pull-request-number != ''
+      # always() so a failed "Apply label" step does not skip the comment;
+      # label and comment are attempted independently and reported separately.
+      if: always() && steps.cpr.outcome == 'success' && steps.resolve_trigger_command.outputs.trigger_mode == 'label' && steps.resolve_trigger_command.outputs.comment_template != '' && steps.cpr.outputs.pull-request-number != ''
       id: post_split_pr_comment
       uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
       env:

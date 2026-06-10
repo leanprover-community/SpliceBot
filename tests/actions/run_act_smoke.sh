@@ -182,4 +182,28 @@ if [ "$run_reusable_only" != "1" ]; then
     summarize_act_failure "$composite_log_file"
     exit 1
   fi
+
+  # Each job only asserts (in-workflow) that the action ended in failure. Verify
+  # here that each job also reached and failed at the stage its name claims, so a
+  # regression that fails earlier (for example a malformed bridge override that
+  # dies at consume) is caught instead of passing vacuously.
+  composite_expected_file="tests/actions/workflows/splice_action_harness.expected"
+  if [ -f "$composite_expected_file" ]; then
+    while IFS= read -r expected_line || [ -n "$expected_line" ]; do
+      [ -z "$expected_line" ] && continue
+      case "$expected_line" in
+        \#*) continue ;;
+      esac
+      job_name="${expected_line%% :: *}"
+      marker="${expected_line#* :: }"
+      if ! tests/actions/assert/log_line_contains.sh "$composite_log_file" "$job_name" "$marker"; then
+        echo "Composite harness job '${job_name}' did not reach its expected stage." >&2
+        summarize_act_failure "$composite_log_file"
+        echo "--- begin act log ---" >&2
+        cat "$composite_log_file" >&2
+        echo "--- end act log ---" >&2
+        exit 1
+      fi
+    done < "$composite_expected_file"
+  fi
 fi

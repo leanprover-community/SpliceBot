@@ -1,0 +1,11 @@
+# Job-bound markers for the composite-action harness.
+# Format: <job-name> :: <log marker that must appear on a line tagged with that job>
+# act prefixes every log line with the job name, so the runner asserts that one
+# line contains both the job name and the marker. This proves each job reaches
+# (and fails at) the stage its name claims, not merely that it failed somewhere.
+invalid-bridge-override-json :: override_json must be a JSON object
+representative-auth-denial :: not authorized to trigger splice-bot
+invalid-label-command-config-fails-early :: Could not parse label_commands
+label-command-path-enters-split-flow :: Authorized label command 'ready'
+comment-command-path-enters-split-flow :: Authorized label command 'maintainer-merge'
+splice-path-reaches-late-workflow-steps :: Check out BASE
