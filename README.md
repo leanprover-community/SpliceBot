@@ -144,6 +144,7 @@ Each command object supports:
 - `min_repo_permission`: optional command-specific permission floor; one of `disabled`, `anyone`, `triage`, `write`, `maintain`, `admin` and defaults to `write`
 - `allowed_users`: optional command-specific user allowlist
 - `allowed_teams`: optional command-specific team allowlist
+- `type`: optional command type; defaults to `add-label`, which is currently the only supported value
 
 JSON example:
 
@@ -178,6 +179,7 @@ Behavior notes:
 - Label commands may use command-specific `allowed_users`, `allowed_teams`, and `min_repo_permission`.
 - Command-specific rules are checked in addition to the normal top-level authorization rules.
 - When a command matches, the configured label is applied to the generated split PR after creation.
+- If the label cannot be applied (for example, missing `issues: write`), the split PR still exists; the run fails and the callback comment reports `Failed to apply label`.
 
 ## GitHub App token minting in caller job
 
@@ -302,7 +304,7 @@ Permission mapping references:
 | `min_repo_permission` | string | No | `anyone` | Minimum permission threshold: `disabled`, `anyone`, `triage`, `write`, `maintain`, `admin`. |
 | `allowed_teams` | string | No | `''` | Comma/newline-separated team allowlist (`team-slug` or `org/team-slug`). |
 | `allowed_users` | string | No | `''` | Comma/newline-separated GitHub login allowlist. |
-| `label_commands` | string | No | `''` | JSON array of label-command objects (`command`/`keyword`, `label`, optional `min_repo_permission`, `allowed_users`, `allowed_teams`). `min_repo_permission: disabled` means command authorization relies only on the command-level allowlists. |
+| `label_commands` | string | No | `''` | JSON array of label-command objects (`command`/`keyword`, `label`, optional `min_repo_permission`, `allowed_users`, `allowed_teams`, `type`). `min_repo_permission: disabled` means command authorization relies only on the command-level allowlists. |
 | `push_to_fork` | string | No | `''` | Optional fork destination (`owner/repo`) for PR branches. |
 | `maintainer_can_modify` | string | No | `''` | Optional fork-mode override (`"true"`/`"false"`). |
 | `token` | string | No | `''` | Main API token for artifact download, checkout, and PR operations. Falls back to `github.token`. |
@@ -343,7 +345,7 @@ References:
 | `Unknown splice-bot command` | Trigger keyword did not match any configured `label_commands` entry | Remove the keyword to run the default split flow, or add the missing command to `label_commands` |
 | `Invalid label command configuration` | `label_commands` could not be parsed or validated | Fix the JSON shape so it is an array of objects with `command`/`keyword` and `label` |
 | `Not authorized to run label command` | Commenter passed the top-level auth rules but did not match the command-specific `allowed_users`, `allowed_teams`, or `min_repo_permission` rules | Adjust the command config or use an account/team with the required access |
-| `Failed to apply label` | Workflow token could not add the configured label | Grant `issues: write` / equivalent token scope and verify the label name |
+| `Failed to apply label` | Split PR was created, but the workflow token could not add the configured label | Grant `issues: write` / equivalent token scope and verify the label name; the split PR already exists and can be labeled manually |
 | `Authorization check failed` | Token lacks read access for permission/team lookup | Provide/fix `authz_token` (or authz app credentials) with required access |
 | Split PR created but CI did not run | Main `token` resolved to `github.token` | Use PAT/app token for `token` |
 | `push_to_fork` failed | Branch push credential lacks fork write/workflow permissions | Provide `branch_token` (or branch app creds) with required permissions on the fork |
@@ -351,80 +353,6 @@ References:
 
 ***
 
-# File structure in this repo
+# Development
 
-Reusable workflows:
-
-- `.github/workflows/splice.yaml` (unprivileged event parser + bridge emitter)
-
-Actions:
-
-- `.github/actions/splice-wf-run/action.yml` (privileged consumer + PR creator)
-
-Example caller workflows:
-
-- `.github/workflows/add_splice_bot.yaml`
-- `.github/workflows/add_splice_bot_wf_run.yaml`
-
-## Local `act` smoke tests
-
-You can run the lightweight workflow smoke tests locally with [`act`](https://github.com/nektos/act).
-These tests exercise the reusable trigger workflow against canned review-comment payloads and intentionally skip bridge-artifact emission.
-The composite-action smoke harness uses the internal test-only `bridge_override_json` input; that input exists only for local/CI testing and is not part of the supported public API.
-
-Prerequisites:
-
-- `act` installed locally
-- Docker running
-- `GITHUB_TOKEN` available if the workflow under test needs it, for example:
-  `export GITHUB_TOKEN="$(gh auth token)"`
-
-Run all local `act` smoke tests:
-
-```bash
-tests/actions/run_act_smoke.sh
-```
-
-That script auto-discovers all reusable-workflow event fixtures under `tests/actions/events/` and then runs the composite-action smoke harness.
-If `GITHUB_TOKEN` is set in the environment, the script passes it through to `act` as a secret.
-It also supports a few useful controls for local iteration:
-
-```bash
-# Only run reusable-workflow fixtures whose path contains "keyword"
-ACT_CASE_FILTER=keyword tests/actions/run_act_smoke.sh
-
-# Skip the composite harness
-RUN_REUSABLE_ONLY=1 tests/actions/run_act_smoke.sh
-
-# Run only the composite harness
-RUN_COMPOSITE_ONLY=1 tests/actions/run_act_smoke.sh
-
-# Override per-run timeouts and heartbeat interval
-ACT_REUSABLE_TIMEOUT_SECONDS=180 \
-ACT_COMPOSITE_TIMEOUT_SECONDS=300 \
-ACT_HEARTBEAT_SECONDS=10 \
-tests/actions/run_act_smoke.sh
-```
-
-You can also run individual harnesses directly.
-
-Example commands:
-
-```bash
-act \
-  --workflows tests/actions/workflows/splice_harness.yaml \
-  --eventpath tests/actions/events/pr-review-comment-basic.json \
-  pull_request_review_comment
-```
-
-```bash
-act \
-  --workflows tests/actions/workflows/splice_harness.yaml \
-  --eventpath tests/actions/events/pr-review-comment-keyword.json \
-  pull_request_review_comment
-```
-
-The canned event payloads live under `tests/actions/events/`.
-The CI workflow that runs the same smoke harness is `.github/workflows/act_smoke.yaml`.
-The reusable trigger harness lives at `tests/actions/workflows/splice_harness.yaml`.
-There is also a composite-action harness at `tests/actions/workflows/splice_action_harness.yaml` for deterministic non-network failure cases.
+For the repository layout, node unit tests, and the local `act` smoke-test harness, see [DEVELOPMENT.md](DEVELOPMENT.md).
