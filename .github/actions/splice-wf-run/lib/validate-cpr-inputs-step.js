@@ -1,5 +1,5 @@
 const { execFileSync } = require('node:child_process');
-const { renderPrTitle } = require('./render-pr-title');
+const { renderPrTitle } = require('./render-template');
 
 async function resolveForkOwner({ github, pushToFork, onInfo = () => {}, onWarning = () => {} }) {
   const [forkOwner] = String(pushToFork || '').split('/');

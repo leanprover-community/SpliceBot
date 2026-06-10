@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-SpliceBot is a GitHub Actions tool (not an app — there is no package.json or build step) that creates a single-file pull request from an existing PR when a reviewer leaves a review comment with a line starting with `splice-bot`. It can also run configured keyword commands (`splice-bot <keyword>`) such as applying a label to the generated split PR.
+SpliceBot is a GitHub Actions tool (not an app — there is no package.json or build step) that creates a single-file pull request from an existing PR when a reviewer leaves a review comment with a line starting with `splice-bot`. It can also run configured keyword commands (`splice-bot <keyword>`) that apply a label and/or post a comment on the generated split PR.
 
 ## Commands
 
@@ -33,7 +33,7 @@ The core design is a **two-stage privilege bridge** to safely handle fork-origin
 1. **Unprivileged stage** — `.github/workflows/splice.yaml` (reusable workflow, `permissions: {}`) runs on `pull_request_review_comment`. It parses the comment for a trigger line (`^splice-bot\b`, case-insensitive, start of line), extracts the keyword and PR metadata, and emits a "bridge artifact" via `leanprover-community/privilege-escalation-bridge/emit@v1`. It performs no writes.
 2. **Privileged stage** — a consumer repo's `workflow_run` workflow calls the composite action `.github/actions/splice-wf-run/action.yml`, which consumes the bridge artifact (`privilege-escalation-bridge/consume@v1`), authorizes the commenter, builds a single-file patch (3-way `git apply` of `merge-base..head` diff onto base), creates the split PR via `peter-evans/create-pull-request`, and comments back on the original PR.
 
-The action's step chain: consume bridge → authorize commenter → resolve/authorize trigger command → checkout base + head → stage patch → validate CPR inputs → create PR → comment back (`if: always()`). Each step gates on the prior steps' outcomes; soft failures (no merge-base, patch conflict, empty diff) set `APPLY_FAILED`/`NO_CHANGES` outputs rather than failing, and the comment-back step reports the result either way.
+The action's step chain: consume bridge → authorize commenter → resolve/authorize trigger command → checkout base + head → stage patch → validate CPR inputs → create PR → apply label / post comment (keyword commands only) → comment back (`if: always()`). Each step gates on the prior steps' outcomes; soft failures (no merge-base, patch conflict, empty diff) set `APPLY_FAILED`/`NO_CHANGES` outputs rather than failing, and the comment-back step reports the result either way.
 
 ### JavaScript layout
 

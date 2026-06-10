@@ -33,12 +33,12 @@ async function authorizeCommandActor({
       reason: error.message,
       details: [
         `label command: ${commandName || '(missing)'}`,
-        `label: ${labelName || '(missing)'}`,
+        `label: ${labelName || '(none)'}`,
       ].join('\n'),
     };
   }
 
-  if (!commenterLogin || !baseRepo || !commandName || !labelName) {
+  if (!commenterLogin || !baseRepo || !commandName) {
     return {
       decision: 'error',
       reason: 'Missing label command authorization inputs.',
@@ -46,7 +46,6 @@ async function authorizeCommandActor({
         `commenter_login: ${commenterLogin || '(missing)'}`,
         `base_repo: ${baseRepo || '(missing)'}`,
         `label_command: ${commandName || '(missing)'}`,
-        `label_name: ${labelName || '(missing)'}`,
       ].join('\n'),
     };
   }
@@ -93,7 +92,7 @@ async function authorizeCommandActor({
       `commenter: ${commenterLogin}`,
       `base repo: ${baseRepo}`,
       `label command: ${commandName}`,
-      `label: ${labelName}`,
+      `label: ${labelName || '(none)'}`,
       `required repo permission: ${minRepoPermission}`,
       `observed_repo_permission: ${repoPermission}`,
       `allowed_users: ${allowedUsers.length > 0 ? allowedUsers.join(', ') : '(none)'}`,

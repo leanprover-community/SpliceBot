@@ -1,7 +1,11 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { renderPrTitle } = require('../../.github/actions/splice-wf-run/lib/render-pr-title');
+const {
+  renderPrTitle,
+  renderCommandComment,
+  validateCommandCommentTemplate,
+} = require('../../.github/actions/splice-wf-run/lib/render-template');
 
 test('renderPrTitle renders the default template with the full file path', () => {
   const title = renderPrTitle({
@@ -85,4 +89,56 @@ test('renderPrTitle collapses whitespace and newlines into single spaces', () =>
   });
 
   assert.equal(title, 'chore(src/Foo): automated extraction');
+});
+
+test('renderCommandComment substitutes all supported placeholders and preserves newlines', () => {
+  const body = renderCommandComment({
+    template: 'maintainer merge\n\nRequested by @{commenter} via splice-bot on #{pr_number} ({file_path}); split PR is #{split_pr_number}.',
+    filePath: 'Mathlib/Algebra/Group/Defs.lean',
+    prNumber: 123,
+    splitPrNumber: 456,
+    commenter: 'reviewer',
+  });
+
+  assert.equal(
+    body,
+    'maintainer merge\n\nRequested by @reviewer via splice-bot on #123 (Mathlib/Algebra/Group/Defs.lean); split PR is #456.',
+  );
+});
+
+test('renderCommandComment supports {file_scope} with a strip prefix', () => {
+  const body = renderCommandComment({
+    template: 'Spliced {file_scope} ({file_name})',
+    filePath: 'Mathlib/Algebra/Group/Defs.lean',
+    prNumber: 1,
+    splitPrNumber: 2,
+    commenter: 'reviewer',
+    scopeStripPrefix: 'Mathlib/',
+  });
+
+  assert.equal(body, 'Spliced Algebra/Group/Defs (Defs.lean)');
+});
+
+test('renderCommandComment rejects unknown placeholders and empty templates', () => {
+  assert.throws(
+    () =>
+      renderCommandComment({
+        template: 'hello {who}',
+        filePath: 'a.lean',
+        prNumber: 1,
+        splitPrNumber: 2,
+        commenter: 'reviewer',
+      }),
+    /Unknown placeholder\(s\) in comment template: \{who\}/,
+  );
+  assert.throws(
+    () => renderCommandComment({ template: '  ', filePath: 'a.lean', prNumber: 1, splitPrNumber: 2, commenter: 'r' }),
+    /comment template is empty/,
+  );
+});
+
+test('validateCommandCommentTemplate accepts supported placeholders and rejects unknown ones', () => {
+  validateCommandCommentTemplate('maintainer merge\n\nby @{commenter} from #{pr_number} as #{split_pr_number}');
+  assert.throws(() => validateCommandCommentTemplate('hello {who}'), /Unknown placeholder\(s\) in comment template/);
+  assert.throws(() => validateCommandCommentTemplate(''), /comment template is empty/);
 });

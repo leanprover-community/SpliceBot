@@ -6,6 +6,9 @@ function buildCommentBody({
   labelName,
   labelApplyFailed,
   labelApplyError,
+  commandCommentConfigured,
+  commentPostFailed,
+  commentPostError,
   filePath,
   applyFailed,
   noChanges,
@@ -45,7 +48,7 @@ function buildCommentBody({
     title = 'Invalid label command configuration';
     bodyIntro = triggerResolveError || 'I could not parse the configured `label_commands` input.';
     adviceLines = [
-      'Fix the `label_commands` workflow input so it is valid JSON and each entry includes `command` (or `keyword`) plus `label`.',
+      'Fix the `label_commands` workflow input so it is valid JSON and each entry includes `command` (or `keyword`) plus `label` and/or `comment`.',
     ];
   } else if (triggerMode === 'unknown') {
     title = 'Unknown splice-bot command';
@@ -99,6 +102,13 @@ function buildCommentBody({
       'Confirm the review comment is on a file that actually changed in the current PR head commit range.',
       'Push the intended file changes first, then trigger the bot again with a new review comment.',
     ];
+  } else if (triggerMode === 'label' && automatedPrNumber && labelApplyFailed && commentPostFailed) {
+    title = 'Failed to apply label and post comment';
+    bodyIntro = `Split off the changes to **${filePath}** in #${automatedPrNumber}, but splice-bot command \`${labelCommand}\` could not apply label **${labelName}**${labelApplyError ? ` (${labelApplyError})` : ''} or post the configured comment${commentPostError ? ` (${commentPostError})` : ''}.`;
+    adviceLines = [
+      'Verify the workflow token has `issues: write` (or an equivalent scope) on the base repository and that the label name is valid.',
+      `Once fixed, apply label **${labelName}** and post the comment on #${automatedPrNumber} manually, or re-trigger the command.`,
+    ];
   } else if (triggerMode === 'label' && automatedPrNumber && labelApplyFailed) {
     title = 'Failed to apply label';
     bodyIntro = `Split off the changes to **${filePath}** in #${automatedPrNumber}, but I couldn't apply label **${labelName}** via splice-bot command \`${labelCommand}\`${labelApplyError ? `: ${labelApplyError}` : '.'}`;
@@ -106,9 +116,23 @@ function buildCommentBody({
       'Verify the workflow token has `issues: write` (or an equivalent scope) on the base repository and that the label name is valid.',
       `Once fixed, apply label **${labelName}** to #${automatedPrNumber} manually or re-trigger the command.`,
     ];
+  } else if (triggerMode === 'label' && automatedPrNumber && commentPostFailed) {
+    title = 'Failed to post comment on split PR';
+    bodyIntro = `Split off the changes to **${filePath}** in #${automatedPrNumber}${labelName ? ` and applied label **${labelName}**` : ''}, but I couldn't post the comment configured for splice-bot command \`${labelCommand}\`${commentPostError ? `: ${commentPostError}` : '.'}`;
+    adviceLines = [
+      'Verify the workflow token can comment on issues/PRs in the base repository (`issues: write` or `pull-requests: write`).',
+      `Once fixed, post the comment on #${automatedPrNumber} manually or re-trigger the command.`,
+    ];
   } else if (triggerMode === 'label' && automatedPrNumber) {
-    title = 'Split PR created and labeled';
-    bodyIntro = `Split off the changes to **${filePath}** in #${automatedPrNumber} and applied label **${labelName}** via splice-bot command \`${labelCommand}\`.`;
+    const commandActions = [];
+    if (labelName) commandActions.push(`applied label **${labelName}**`);
+    if (commandCommentConfigured) commandActions.push('posted a comment');
+    title = labelName && commandCommentConfigured
+      ? 'Split PR created, labeled, and commented'
+      : commandCommentConfigured
+        ? 'Split PR created and commented'
+        : 'Split PR created and labeled';
+    bodyIntro = `Split off the changes to **${filePath}** in #${automatedPrNumber} and ${commandActions.join(' and ')} via splice-bot command \`${labelCommand}\`.`;
     adviceLines = [`Review and merge #${automatedPrNumber} if it looks correct.`];
   } else if (automatedPrNumber) {
     title = 'Split PR created';
@@ -188,7 +212,7 @@ function buildCommentBody({
   const successBody = `**${title}**\n\n${bodyIntro}`;
   const failureBody = `**${title}**\n\n${bodyIntro}${failedStepsLine}\n\nAdvice:\n${adviceBlock}\n\nRun logs: ${runUrl}\n\n${stepOutcomesDetails}\n\n${tokenDiagnosticsBlock}`;
 
-  const wasSuccessful = Boolean(automatedPrNumber) && !labelApplyFailed;
+  const wasSuccessful = Boolean(automatedPrNumber) && !labelApplyFailed && !commentPostFailed;
   return wasSuccessful ? successBody : failureBody;
 }
 
@@ -204,6 +228,9 @@ function buildCallbackCommentPayload(input) {
     labelName,
     labelApplyFailed,
     labelApplyError,
+    commandCommentConfigured,
+    commentPostFailed,
+    commentPostError,
     filePath,
     applyFailed,
     noChanges,
@@ -260,6 +287,9 @@ function buildCallbackCommentPayload(input) {
       labelName,
       labelApplyFailed,
       labelApplyError,
+      commandCommentConfigured,
+      commentPostFailed,
+      commentPostError,
       filePath,
       applyFailed,
       noChanges,

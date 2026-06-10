@@ -158,16 +158,19 @@ This produces titles like `chore(Algebra/Group/Defs): automated extraction from 
 ## Configured label commands
 
 When a trigger line is `splice-bot <keyword>`, SpliceBot checks `label_commands` in the `splice-wf-run` action before running the default split-PR flow.
-If the keyword matches a configured command, it still creates the split PR and then applies the configured label to the generated PR.
+If the keyword matches a configured command, it still creates the split PR and then runs the command's configured actions on the generated PR: applying a label, posting a comment, or both.
 
 Each command object supports:
 
 - `command` or `keyword`: the token immediately after `splice-bot`
-- `label`: the label name to apply to the generated split PR
+- `label`: optional label name to apply to the generated split PR
+- `comment`: optional comment template posted on the generated split PR after creation; supports the `{file_path}`, `{file_name}`, `{file_scope}`, and `{pr_number}` placeholders from `pr_title` templates plus `{split_pr_number}` (the generated PR's number) and `{commenter}` (login of the reviewer who triggered the command). Newlines are preserved, so JSON `\n` escapes can build multi-line comments. Unknown placeholders are rejected as invalid configuration.
 - `min_repo_permission`: optional command-specific permission floor; one of `disabled`, `anyone`, `triage`, `write`, `maintain`, `admin` and defaults to `write`
 - `allowed_users`: optional command-specific user allowlist
 - `allowed_teams`: optional command-specific team allowlist
 - `type`: optional command type; defaults to `add-label`, which is currently the only supported value
+
+Each command must configure `label` and/or `comment`; commands with neither are rejected as invalid configuration.
 
 JSON example:
 
@@ -187,6 +190,12 @@ with:
         "label": "blocked",
         "min_repo_permission": "maintain",
         "allowed_users": ["release-manager"]
+      },
+      {
+        "command": "maintainer-merge",
+        "comment": "maintainer merge\n\nRequested by @{commenter} via splice-bot from #{pr_number}.",
+        "min_repo_permission": "disabled",
+        "allowed_teams": ["my-org/reviewers"]
       }
     ]
 ```
@@ -201,8 +210,35 @@ Behavior notes:
 - Command-level auth is also fail-closed.
 - Label commands may use command-specific `allowed_users`, `allowed_teams`, and `min_repo_permission`.
 - Command-specific rules are checked in addition to the normal top-level authorization rules.
-- When a command matches, the configured label is applied to the generated split PR after creation.
+- When a command matches, the configured label (if any) is applied to the generated split PR after creation, and the configured comment (if any) is posted on it.
 - If the label cannot be applied (for example, missing `issues: write`), the split PR still exists; the run fails and the callback comment reports `Failed to apply label`.
+- If the comment cannot be posted, the split PR (and any applied label) still exists; the run fails and the callback comment reports `Failed to post comment on split PR`.
+- Comments are posted by the account behind the `token` input (or `github.token`). Downstream automation triggered by such comments sees that account as the comment author, not the reviewer who ran the command — include `{commenter}` in the template when the human requester matters.
+
+### Chaining into comment-triggered automation (e.g. mathlib's `maintainer merge`)
+
+A comment command can hand the split PR off to existing comment-triggered automation. For example, mathlib reviewers can splice a file out of a PR and queue the result for maintainer attention in one review comment (`splice-bot maintainer-merge`) with a command like:
+
+```yaml
+with:
+  source_workflow: ${{ github.event.workflow_run.name }}
+  token: ${{ secrets.SPLICE_BOT_TOKEN }}
+  authz_token: ${{ secrets.SPLICE_BOT_AUTHZ_TOKEN }}
+  label_commands: >-
+    [
+      {
+        "command": "maintainer-merge",
+        "comment": "maintainer merge\n\nRequested by @{commenter} via splice-bot from #{pr_number}.",
+        "min_repo_permission": "disabled",
+        "allowed_teams": ["leanprover-community/mathlib-reviewers"]
+      }
+    ]
+```
+
+Two caveats when chaining like this:
+
+- The downstream workflow authorizes the *comment author*, which is the bot account behind `token`, not the reviewer. The downstream workflow must explicitly trust comments from that bot account (mathlib already special-cases trusted bot authors in its bors workflows). SpliceBot's command-level `allowed_teams` check above is what guarantees the bot only posts the comment on behalf of an authorized reviewer.
+- Match the downstream trigger's exact comment format. mathlib's `maintainer merge` parser only matches a line that is exactly `maintainer merge`, so keep the trigger text on its own line (as in the `\n\n` example above) and put attribution on a separate line.
 
 ## GitHub App token minting in caller job
 
@@ -327,7 +363,7 @@ Permission mapping references:
 | `min_repo_permission` | string | No | `anyone` | Minimum permission threshold: `disabled`, `anyone`, `triage`, `write`, `maintain`, `admin`. |
 | `allowed_teams` | string | No | `''` | Comma/newline-separated team allowlist (`team-slug` or `org/team-slug`). |
 | `allowed_users` | string | No | `''` | Comma/newline-separated GitHub login allowlist. |
-| `label_commands` | string | No | `''` | JSON array of label-command objects (`command`/`keyword`, `label`, optional `min_repo_permission`, `allowed_users`, `allowed_teams`, `type`). `min_repo_permission: disabled` means command authorization relies only on the command-level allowlists. |
+| `label_commands` | string | No | `''` | JSON array of label-command objects (`command`/`keyword`, optional `label`, optional `comment` template, optional `min_repo_permission`, `allowed_users`, `allowed_teams`, `type`). Each command needs `label` and/or `comment`. `min_repo_permission: disabled` means command authorization relies only on the command-level allowlists. |
 | `push_to_fork` | string | No | `''` | Optional fork destination (`owner/repo`) for PR branches. |
 | `maintainer_can_modify` | string | No | `''` | Optional fork-mode override (`"true"`/`"false"`). |
 | `pr_title` | string | No | `chore({file_path}): automated extraction` | Title template for the split PR. Supports `{file_path}`, `{file_name}`, `{file_scope}`, and `{pr_number}` placeholders; unknown placeholders fail the run. |
@@ -368,9 +404,10 @@ References:
 | ------- | ------------ | ------ |
 | `Not authorized to trigger splice-bot` | Commenter does not match configured auth rules | Adjust auth inputs (`allow_pr_author`, `min_repo_permission`, `allowed_users`, `allowed_teams`) or use an authorized account |
 | `Unknown splice-bot command` | Trigger keyword did not match any configured `label_commands` entry | Remove the keyword to run the default split flow, or add the missing command to `label_commands` |
-| `Invalid label command configuration` | `label_commands` could not be parsed or validated | Fix the JSON shape so it is an array of objects with `command`/`keyword` and `label` |
+| `Invalid label command configuration` | `label_commands` could not be parsed or validated | Fix the JSON shape so it is an array of objects with `command`/`keyword` plus `label` and/or `comment` (with only supported `comment` placeholders) |
 | `Not authorized to run label command` | Commenter passed the top-level auth rules but did not match the command-specific `allowed_users`, `allowed_teams`, or `min_repo_permission` rules | Adjust the command config or use an account/team with the required access |
 | `Failed to apply label` | Split PR was created, but the workflow token could not add the configured label | Grant `issues: write` / equivalent token scope and verify the label name; the split PR already exists and can be labeled manually |
+| `Failed to post comment on split PR` | Split PR was created, but the workflow token could not post the configured command comment | Grant `issues: write` / `pull-requests: write` token scope; the split PR already exists and the comment can be posted manually |
 | `Authorization check failed` | Token lacks read access for permission/team lookup | Provide/fix `authz_token` (or authz app credentials) with required access |
 | Split PR created but CI did not run | Main `token` resolved to `github.token` | Use PAT/app token for `token` |
 | `push_to_fork` failed | Branch push credential lacks fork write/workflow permissions | Provide `branch_token` (or branch app creds) with required permissions on the fork |

@@ -12,6 +12,7 @@ function collectStepOutcomes(env = process.env) {
     ['Validate create-pull-request inputs', env.VALIDATE_CPR_INPUTS_OUTCOME || ''],
     ['Create Pull Request', env.CPR_OUTCOME || ''],
     ['Apply label to split PR', env.APPLY_LABEL_OUTCOME || ''],
+    ['Post comment on split PR', env.POST_SPLIT_PR_COMMENT_OUTCOME || ''],
   ];
 }
 
@@ -28,6 +29,9 @@ module.exports = async function runCommentBackStep({ core, github, env = process
     labelName: env.LABEL_NAME || '',
     labelApplyFailed: env.LABEL_APPLY_FAILED === 'true' || env.APPLY_LABEL_OUTCOME === 'failure',
     labelApplyError: env.LABEL_APPLY_ERROR || '',
+    commandCommentConfigured: Boolean((env.COMMAND_COMMENT_TEMPLATE || '').trim()),
+    commentPostFailed: env.COMMENT_POST_FAILED === 'true' || env.POST_SPLIT_PR_COMMENT_OUTCOME === 'failure',
+    commentPostError: env.COMMENT_POST_ERROR || '',
     filePath: env.FILE_PATH || '',
     applyFailed: env.APPLY_FAILED === 'true',
     noChanges: env.NO_CHANGES === 'true',

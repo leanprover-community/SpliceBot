@@ -161,5 +161,58 @@ test('collectStepOutcomes builds labeled outcomes from env vars', () => {
     ['Validate create-pull-request inputs', ''],
     ['Create Pull Request', 'cancelled'],
     ['Apply label to split PR', ''],
+    ['Post comment on split PR', ''],
   ]);
+});
+
+test('comment-back step reports a failed split-PR comment from step env vars', async () => {
+  const replyCalls = [];
+  const github = {
+    rest: {
+      pulls: {
+        createReplyForReviewComment: async (payload) => {
+          replyCalls.push(payload);
+        },
+      },
+      issues: {
+        createComment: async () => {
+          throw new Error('should not be called');
+        },
+      },
+    },
+  };
+
+  await runCommentBackStep({
+    core: {
+      info: () => {},
+      warning: () => {},
+    },
+    github,
+    env: {
+      ORIGINAL_PR_NUMBER: '42',
+      REVIEW_COMMENT_ID: '7',
+      REPO_FULL: 'leanprover-community/SpliceBot',
+      TRIGGER_MODE: 'label',
+      TRIGGER_KEYWORD: 'maintainer-merge',
+      LABEL_COMMAND: 'maintainer-merge',
+      LABEL_NAME: '',
+      COMMAND_COMMENT_TEMPLATE: 'maintainer merge',
+      COMMENT_POST_FAILED: 'true',
+      COMMENT_POST_ERROR: 'Resource not accessible by integration',
+      POST_SPLIT_PR_COMMENT_OUTCOME: 'failure',
+      FILE_PATH: 'src/Foo.lean',
+      AUTOMATED_PR_NUMBER: '99',
+      BASE_REF: 'master',
+      HEAD_REF: 'feature',
+      HEAD_LABEL: 'author:feature',
+      RUN_URL: 'https://example.test/run',
+      AUTHZ_OUTCOME: 'success',
+      AUTHZ_DECISION: 'allow',
+      CPR_OUTCOME: 'success',
+    },
+  });
+
+  assert.equal(replyCalls.length, 1);
+  assert.match(replyCalls[0].body, /\*\*Failed to post comment on split PR\*\*/);
+  assert.match(replyCalls[0].body, /Resource not accessible by integration/);
 });

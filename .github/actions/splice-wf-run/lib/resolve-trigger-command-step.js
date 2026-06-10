@@ -1,5 +1,6 @@
 const fs = require('fs');
 const { authorizeCommandActor } = require('./command-authorization');
+const { validateCommandCommentTemplate } = require('./render-template');
 
 function normalizeList(value) {
   if (value == null) return [];
@@ -25,13 +26,21 @@ function parseLabelCommands(raw) {
 
     const keyword = String(entry.command ?? entry.keyword ?? '').trim().toLowerCase();
     const label = String(entry.label ?? '').trim();
+    const comment = entry.comment == null ? '' : String(entry.comment);
     const minRepoPermission = String(entry.min_repo_permission ?? 'write').trim().toLowerCase();
     const allowedUsers = normalizeList(entry.allowed_users);
     const allowedTeams = normalizeList(entry.allowed_teams);
     const type = String(entry.type ?? 'add-label').trim().toLowerCase();
 
     if (!keyword) throw new Error(`label_commands[${index}] is missing command/keyword.`);
-    if (!label) throw new Error(`label_commands[${index}] is missing label.`);
+    if (!label && !comment.trim()) throw new Error(`label_commands[${index}] is missing label and/or comment.`);
+    if (entry.comment != null) {
+      try {
+        validateCommandCommentTemplate(comment);
+      } catch (error) {
+        throw new Error(`label_commands[${index}] has an invalid comment template: ${error.message}`);
+      }
+    }
     if (type !== 'add-label') throw new Error(`label_commands[${index}] has unsupported type '${type}'.`);
     if (!validMinRepoPermissions.has(minRepoPermission)) {
       throw new Error(`label_commands[${index}] has invalid min_repo_permission '${minRepoPermission}'.`);
@@ -40,6 +49,7 @@ function parseLabelCommands(raw) {
     return {
       command: keyword,
       label,
+      comment,
       min_repo_permission: minRepoPermission,
       allowed_users: allowedUsers,
       allowed_teams: allowedTeams,
@@ -87,6 +97,7 @@ function resolveTriggerCommand({ rawCommands, triggerKeyword }) {
     trigger_mode: 'label',
     label_command: match.command,
     label_name: match.label,
+    comment_template: match.comment,
     label_min_repo_permission: match.min_repo_permission,
     label_allowed_users_json: JSON.stringify(match.allowed_users),
     label_allowed_teams_json: JSON.stringify(match.allowed_teams),
@@ -96,7 +107,13 @@ function resolveTriggerCommand({ rawCommands, triggerKeyword }) {
 function writeOutputs(outputs, outputPath) {
   const lines = Object.entries(outputs)
     .filter(([, value]) => value !== undefined && value !== null && value !== false)
-    .map(([key, value]) => `${key}=${value}`);
+    .map(([key, value]) => {
+      const text = String(value);
+      if (text.includes('\n')) {
+        return `${key}<<SPLICE_BOT_OUTPUT_EOF\n${text}\nSPLICE_BOT_OUTPUT_EOF`;
+      }
+      return `${key}=${text}`;
+    });
 
   if (lines.length > 0) {
     fs.appendFileSync(outputPath, `${lines.join('\n')}\n`);

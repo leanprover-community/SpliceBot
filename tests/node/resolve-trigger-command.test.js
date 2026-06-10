@@ -43,5 +43,54 @@ test('resolveTriggerCommand fails on invalid label command config', () => {
 
   assert.equal(result.trigger_mode, 'invalid');
   assert.equal(result.shouldFail, true);
-  assert.match(result.resolve_error, /missing label/i);
+  assert.match(result.resolve_error, /missing label and\/or comment/i);
+});
+
+test('resolveTriggerCommand resolves comment-only commands', () => {
+  const result = resolveTriggerCommand({
+    rawCommands:
+      '[{"command":"maintainer-merge","comment":"maintainer merge\\n\\nRequested by @{commenter} via splice-bot from #{pr_number}."}]',
+    triggerKeyword: 'maintainer-merge',
+  });
+
+  assert.equal(result.trigger_mode, 'label');
+  assert.equal(result.label_command, 'maintainer-merge');
+  assert.equal(result.label_name, '');
+  assert.equal(
+    result.comment_template,
+    'maintainer merge\n\nRequested by @{commenter} via splice-bot from #{pr_number}.',
+  );
+});
+
+test('resolveTriggerCommand resolves commands with both label and comment', () => {
+  const result = resolveTriggerCommand({
+    rawCommands: '[{"command":"ready","label":"ready-to-merge","comment":"queued from #{pr_number}"}]',
+    triggerKeyword: 'ready',
+  });
+
+  assert.equal(result.trigger_mode, 'label');
+  assert.equal(result.label_name, 'ready-to-merge');
+  assert.equal(result.comment_template, 'queued from #{pr_number}');
+});
+
+test('resolveTriggerCommand fails on comment templates with unknown placeholders', () => {
+  const result = resolveTriggerCommand({
+    rawCommands: '[{"command":"ready","comment":"hello {who}"}]',
+    triggerKeyword: 'ready',
+  });
+
+  assert.equal(result.trigger_mode, 'invalid');
+  assert.equal(result.shouldFail, true);
+  assert.match(result.resolve_error, /invalid comment template.*\{who\}/);
+});
+
+test('resolveTriggerCommand fails on blank comment templates', () => {
+  const result = resolveTriggerCommand({
+    rawCommands: '[{"command":"ready","label":"ready-to-merge","comment":"   "}]',
+    triggerKeyword: 'ready',
+  });
+
+  assert.equal(result.trigger_mode, 'invalid');
+  assert.equal(result.shouldFail, true);
+  assert.match(result.resolve_error, /comment template is empty/);
 });

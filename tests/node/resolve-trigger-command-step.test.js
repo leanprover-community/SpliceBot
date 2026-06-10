@@ -103,3 +103,27 @@ test('runResolveAndAuthorizeCommandStep fails when command-specific authorizatio
   assert.equal(outputs.get('label_authz_decision'), 'deny');
   assert.match(messages.failed[0], /not authorized to run label command/);
 });
+
+test('runResolveAndAuthorizeCommandStep authorizes comment-only commands and emits the template', async () => {
+  const { core, outputs, messages } = createCoreStub();
+
+  await runResolveAndAuthorizeCommandStep({
+    core,
+    github: createGithubStub(),
+    env: {
+      RAW_LABEL_COMMANDS:
+        '[{"command":"maintainer-merge","comment":"maintainer merge\\n\\nRequested by @{commenter}.","min_repo_permission":"triage"}]',
+      TRIGGER_KEYWORD: 'maintainer-merge',
+      COMMENTER_LOGIN: 'reviewer',
+      BASE_REPO: 'leanprover-community/SpliceBot',
+      INPUT_TOKEN: 'token',
+    },
+  });
+
+  assert.equal(outputs.get('trigger_mode'), 'label');
+  assert.equal(outputs.get('label_command'), 'maintainer-merge');
+  assert.equal(outputs.get('label_name'), '');
+  assert.equal(outputs.get('comment_template'), 'maintainer merge\n\nRequested by @{commenter}.');
+  assert.equal(outputs.get('label_authz_decision'), 'allow');
+  assert.equal(messages.failed.length, 0);
+});

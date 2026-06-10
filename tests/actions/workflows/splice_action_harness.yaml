@@ -105,6 +105,32 @@ jobs:
           set -euo pipefail
           [ "${{ steps.label_path.outcome }}" = "failure" ]
 
+  comment-command-path-enters-split-flow:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Run comment-only command split-flow case
+        id: comment_path
+        continue-on-error: true
+        uses: ./.github/actions/splice-wf-run
+        with:
+          source_workflow: act-harness
+          token: test-token
+          authz_token: test-token
+          allow_pr_author: 'true'
+          label_commands: >-
+            [{"command":"maintainer-merge","comment":"maintainer merge\n\nRequested by @{commenter} via splice-bot from #{pr_number}.","min_repo_permission":"anyone"}]
+          bridge_override_json: >-
+            {"file_path":"src/Foo.lean","commenter_login":"author","pr_author_login":"author","base_ref":"master","trigger_keyword":"maintainer-merge","base_repo":"leanprover-community/SpliceBot","head_repo":"leanprover-community/SpliceBot","head_sha":"1111111111111111111111111111111111111111","head_ref":"feature","head_label":"author:feature","committer":"github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>","author":"author <12345+author@users.noreply.github.com>"}
+
+      - name: Assert comment command path failed after entering split flow
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ "${{ steps.comment_path.outcome }}" = "failure" ]
+
   representative-auth-denial:
     runs-on: ubuntu-latest
     steps:

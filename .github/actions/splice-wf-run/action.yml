@@ -26,7 +26,7 @@ inputs:
     required: false
     default: ''
   label_commands:
-    description: Optional JSON array of label command objects ({command|keyword, label, min_repo_permission?, allowed_users?, allowed_teams?, type?})
+    description: Optional JSON array of label command objects ({command|keyword, label?, comment?, min_repo_permission?, allowed_users?, allowed_teams?, type?}); each command needs label and/or comment
     required: false
     default: ''
   push_to_fork:
@@ -260,7 +260,7 @@ runs:
         delete-branch: true
 
     - name: Apply label to split PR
-      if: steps.cpr.outcome == 'success' && steps.resolve_trigger_command.outputs.trigger_mode == 'label' && steps.cpr.outputs.pull-request-number != ''
+      if: steps.cpr.outcome == 'success' && steps.resolve_trigger_command.outputs.trigger_mode == 'label' && steps.resolve_trigger_command.outputs.label_name != '' && steps.cpr.outputs.pull-request-number != ''
       id: apply_label
       uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
       env:
@@ -268,6 +268,25 @@ runs:
         REPO_FULL: ${{ steps.bridge.outputs.base_repo }}
         LABEL_NAME: ${{ steps.resolve_trigger_command.outputs.label_name }}
         SPLIT_PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
+      with:
+        github-token: ${{ inputs.token || github.token }}
+        script: |
+          const run = require(process.env.ACTION_LIB_PATH);
+          await run({ core, github, env: process.env });
+
+    - name: Post comment on split PR
+      if: steps.cpr.outcome == 'success' && steps.resolve_trigger_command.outputs.trigger_mode == 'label' && steps.resolve_trigger_command.outputs.comment_template != '' && steps.cpr.outputs.pull-request-number != ''
+      id: post_split_pr_comment
+      uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+      env:
+        ACTION_LIB_PATH: ${{ github.action_path }}/lib/post-split-pr-comment-step.js
+        REPO_FULL: ${{ steps.bridge.outputs.base_repo }}
+        COMMENT_TEMPLATE: ${{ steps.resolve_trigger_command.outputs.comment_template }}
+        SPLIT_PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
+        FILE_PATH: ${{ steps.bridge.outputs.file_path }}
+        PR_NUMBER: ${{ steps.bridge.outputs.pr_number }}
+        COMMENTER_LOGIN: ${{ steps.bridge.outputs.commenter_login }}
+        SCOPE_STRIP_PREFIX: ${{ inputs.scope_strip_prefix }}
       with:
         github-token: ${{ inputs.token || github.token }}
         script: |
@@ -289,6 +308,9 @@ runs:
         LABEL_NAME: ${{ steps.resolve_trigger_command.outputs.label_name }}
         LABEL_APPLY_FAILED: ${{ steps.apply_label.outputs.label_apply_failed }}
         LABEL_APPLY_ERROR: ${{ steps.apply_label.outputs.label_apply_error }}
+        COMMAND_COMMENT_TEMPLATE: ${{ steps.resolve_trigger_command.outputs.comment_template }}
+        COMMENT_POST_FAILED: ${{ steps.post_split_pr_comment.outputs.comment_post_failed }}
+        COMMENT_POST_ERROR: ${{ steps.post_split_pr_comment.outputs.comment_post_error }}
         FILE_PATH: ${{ steps.bridge.outputs.file_path }}
         APPLY_FAILED: ${{ steps.branch_and_copy.outputs.APPLY_FAILED }}
         NO_CHANGES: ${{ steps.branch_and_copy.outputs.NO_CHANGES }}
@@ -321,6 +343,7 @@ runs:
         VALIDATE_CPR_INPUTS_OUTCOME: ${{ steps.validate_cpr_inputs.outcome }}
         CPR_OUTCOME: ${{ steps.cpr.outcome }}
         APPLY_LABEL_OUTCOME: ${{ steps.apply_label.outcome }}
+        POST_SPLIT_PR_COMMENT_OUTCOME: ${{ steps.post_split_pr_comment.outcome }}
       with:
         github-token: ${{ inputs.token || github.token }}
         script: |
