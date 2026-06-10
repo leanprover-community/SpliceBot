@@ -132,6 +132,29 @@ jobs:
           # branch_token: ${{ secrets.SPLICE_BOT_FORK_TOKEN }}
 ```
 
+## Custom split PR title
+
+The split PR title is rendered from the `pr_title` template input (default: `chore({file_path}): automated extraction`). Supported placeholders:
+
+- `{file_path}` — full repo path of the spliced file (e.g. `Mathlib/Algebra/Group/Defs.lean`)
+- `{file_name}` — file basename (e.g. `Defs.lean`)
+- `{file_scope}` — file path with the extension removed and the `scope_strip_prefix` input (if set) stripped from the front (e.g. `Algebra/Group/Defs`)
+- `{pr_number}` — number of the original PR
+
+Unknown placeholders fail the run before the PR is created, so typos are reported instead of producing a wrong title.
+
+Example matching mathlib's commit-style title convention (`<kind>(<scope>): <subject>` where the scope must not start with `Mathlib/` or end with `.lean`):
+
+```yaml
+      - uses: leanprover-community/SpliceBot/.github/actions/splice-wf-run@master
+        with:
+          source_workflow: ${{ github.event.workflow_run.name }}
+          pr_title: 'chore({file_scope}): automated extraction from #{pr_number}'
+          scope_strip_prefix: 'Mathlib/'
+```
+
+This produces titles like `chore(Algebra/Group/Defs): automated extraction from #12345`.
+
 ## Configured label commands
 
 When a trigger line is `splice-bot <keyword>`, SpliceBot checks `label_commands` in the `splice-wf-run` action before running the default split-PR flow.
@@ -307,6 +330,8 @@ Permission mapping references:
 | `label_commands` | string | No | `''` | JSON array of label-command objects (`command`/`keyword`, `label`, optional `min_repo_permission`, `allowed_users`, `allowed_teams`, `type`). `min_repo_permission: disabled` means command authorization relies only on the command-level allowlists. |
 | `push_to_fork` | string | No | `''` | Optional fork destination (`owner/repo`) for PR branches. |
 | `maintainer_can_modify` | string | No | `''` | Optional fork-mode override (`"true"`/`"false"`). |
+| `pr_title` | string | No | `chore({file_path}): automated extraction` | Title template for the split PR. Supports `{file_path}`, `{file_name}`, `{file_scope}`, and `{pr_number}` placeholders; unknown placeholders fail the run. |
+| `scope_strip_prefix` | string | No | `''` | Path prefix stripped from the `{file_scope}` placeholder (for example `Mathlib/`). |
 | `token` | string | No | `''` | Main API token for artifact download, checkout, and PR operations. Falls back to `github.token`. |
 | `authz_token` | string | No | `''` | Optional auth-check token for collaborator/team authorization lookups. Falls back to `token`, then `github.token`, but `allowed_teams` should use an explicit token with org-membership read access. |
 | `branch_token` | string | No | `''` | Optional branch push token for `push_to_fork` mode. Falls back to `token`, then `github.token`, but fork mode should use an explicit token with write access to the fork. |

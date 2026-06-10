@@ -1,4 +1,5 @@
 const { execFileSync } = require('node:child_process');
+const { renderPrTitle } = require('./render-pr-title');
 
 async function resolveForkOwner({ github, pushToFork, onInfo = () => {}, onWarning = () => {} }) {
   const [forkOwner] = String(pushToFork || '').split('/');
@@ -83,8 +84,17 @@ async function runValidateCprInputsStep({ core, github, env = process.env }) {
     forkOwnerType,
   });
 
+  const prTitle = renderPrTitle({
+    template: env.PR_TITLE_TEMPLATE || '',
+    filePath: env.FILE_PATH || '',
+    prNumber: env.PR_NUMBER || '',
+    scopeStripPrefix: env.SCOPE_STRIP_PREFIX || '',
+  });
+  core.info(`Rendered split PR title: ${prTitle}`);
+
   core.setOutput('fork_owner', forkOwner);
   core.setOutput('fork_owner_type', forkOwnerType);
+  core.setOutput('pr_title', prTitle);
 
   for (const warning of warnings) {
     core.warning(warning);

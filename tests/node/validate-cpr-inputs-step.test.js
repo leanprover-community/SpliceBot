@@ -115,13 +115,50 @@ test('runValidateCprInputsStep emits outputs and warnings', async () => {
       BRANCH_NAME: 'splice-bot/pr-1-src-Foo-1234567890',
       COMMITTER: 'Bot <bot@example.com>',
       AUTHOR: 'Author <author@example.com>',
+      PR_TITLE_TEMPLATE: 'chore({file_scope}): split from #{pr_number}',
+      SCOPE_STRIP_PREFIX: 'Mathlib/',
+      FILE_PATH: 'Mathlib/Algebra/Group/Defs.lean',
+      PR_NUMBER: '42',
     },
   });
 
   assert.deepEqual(outputs, [
     ['fork_owner', 'org'],
     ['fork_owner_type', 'Unknown'],
+    ['pr_title', 'chore(Algebra/Group/Defs): split from #42'],
   ]);
   assert.match(warnings[0], /Unable to resolve push_to_fork owner type for org: lookup failed/);
   assert.match(warnings[1], /Could not determine push_to_fork owner type/);
+});
+
+test('runValidateCprInputsStep fails on an invalid pr_title template', async () => {
+  await assert.rejects(
+    runValidateCprInputsStep({
+      core: {
+        info: () => {},
+        warning: () => {},
+        setOutput: () => {},
+      },
+      github: {
+        rest: {
+          users: {
+            getByUsername: async () => {
+              throw new Error('should not be called');
+            },
+          },
+        },
+      },
+      env: {
+        PUSH_TO_FORK: '',
+        MAINTAINER_CAN_MODIFY: '',
+        BRANCH_NAME: 'splice-bot/pr-1-src-Foo-1234567890',
+        COMMITTER: '',
+        AUTHOR: '',
+        PR_TITLE_TEMPLATE: 'chore({file_stem}): automated extraction',
+        FILE_PATH: 'src/Foo.lean',
+        PR_NUMBER: '1',
+      },
+    }),
+    /Unknown placeholder\(s\) in pr_title template/,
+  );
 });

@@ -37,6 +37,14 @@ inputs:
     description: Optional override for maintainer edits on fork PRs ("true" or "false")
     required: false
     default: ''
+  pr_title:
+    description: Title template for the split PR; supports {file_path}, {file_name}, {file_scope}, and {pr_number} placeholders
+    required: false
+    default: 'chore({file_path}): automated extraction'
+  scope_strip_prefix:
+    description: Path prefix removed from the {file_scope} placeholder (for example "Mathlib/")
+    required: false
+    default: ''
   token:
     description: Optional token used for artifact download, checkout, and PR API calls; falls back to github.token
     required: false
@@ -214,6 +222,10 @@ runs:
         BRANCH_NAME: ${{ steps.branch_and_copy.outputs.BRANCH }}
         COMMITTER: ${{ steps.bridge.outputs.committer }}
         AUTHOR: ${{ steps.bridge.outputs.author }}
+        PR_TITLE_TEMPLATE: ${{ inputs.pr_title }}
+        SCOPE_STRIP_PREFIX: ${{ inputs.scope_strip_prefix }}
+        FILE_PATH: ${{ steps.bridge.outputs.file_path }}
+        PR_NUMBER: ${{ steps.bridge.outputs.pr_number }}
         ACTION_LIB_PATH: ${{ github.action_path }}/lib/validate-cpr-inputs-step.js
       with:
         github-token: ${{ inputs.token || github.token }}
@@ -237,7 +249,7 @@ runs:
         # CPR expects a strict boolean; treat any non-"true" value as false.
         maintainer-can-modify: ${{ inputs.maintainer_can_modify == 'true' }}
         commit-message: "Automated addition of changes in ${{ steps.bridge.outputs.file_path }}"
-        title: "chore(${{ steps.bridge.outputs.file_path }}): automated extraction"
+        title: ${{ steps.validate_cpr_inputs.outputs.pr_title }}
         body: >-
           This PR was automatically created from PR #${{ steps.bridge.outputs.pr_number }}
           by @${{ steps.bridge.outputs.pr_author_login }} via a
