@@ -4,6 +4,8 @@ function buildCommentBody({
   triggerResolveError,
   labelCommand,
   labelName,
+  labelApplyFailed,
+  labelApplyError,
   filePath,
   applyFailed,
   noChanges,
@@ -97,6 +99,13 @@ function buildCommentBody({
       'Confirm the review comment is on a file that actually changed in the current PR head commit range.',
       'Push the intended file changes first, then trigger the bot again with a new review comment.',
     ];
+  } else if (triggerMode === 'label' && automatedPrNumber && labelApplyFailed) {
+    title = 'Failed to apply label';
+    bodyIntro = `Split off the changes to **${filePath}** in #${automatedPrNumber}, but I couldn't apply label **${labelName}** via splice-bot command \`${labelCommand}\`${labelApplyError ? `: ${labelApplyError}` : '.'}`;
+    adviceLines = [
+      'Verify the workflow token has `issues: write` (or an equivalent scope) on the base repository and that the label name is valid.',
+      `Once fixed, apply label **${labelName}** to #${automatedPrNumber} manually or re-trigger the command.`,
+    ];
   } else if (triggerMode === 'label' && automatedPrNumber) {
     title = 'Split PR created and labeled';
     bodyIntro = `Split off the changes to **${filePath}** in #${automatedPrNumber} and applied label **${labelName}** via splice-bot command \`${labelCommand}\`.`;
@@ -179,7 +188,7 @@ function buildCommentBody({
   const successBody = `**${title}**\n\n${bodyIntro}`;
   const failureBody = `**${title}**\n\n${bodyIntro}${failedStepsLine}\n\nAdvice:\n${adviceBlock}\n\nRun logs: ${runUrl}\n\n${stepOutcomesDetails}\n\n${tokenDiagnosticsBlock}`;
 
-  const wasSuccessful = Boolean(automatedPrNumber);
+  const wasSuccessful = Boolean(automatedPrNumber) && !labelApplyFailed;
   return wasSuccessful ? successBody : failureBody;
 }
 
@@ -193,6 +202,8 @@ function buildCallbackCommentPayload(input) {
     triggerResolveError,
     labelCommand,
     labelName,
+    labelApplyFailed,
+    labelApplyError,
     filePath,
     applyFailed,
     noChanges,
@@ -247,6 +258,8 @@ function buildCallbackCommentPayload(input) {
       triggerResolveError,
       labelCommand,
       labelName,
+      labelApplyFailed,
+      labelApplyError,
       filePath,
       applyFailed,
       noChanges,

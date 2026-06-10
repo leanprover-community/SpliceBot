@@ -160,5 +160,6 @@ test('collectStepOutcomes builds labeled outcomes from env vars', () => {
     ['Stage file changes', ''],
     ['Validate create-pull-request inputs', ''],
     ['Create Pull Request', 'cancelled'],
+    ['Apply label to split PR', ''],
   ]);
 });
