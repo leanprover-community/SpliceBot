@@ -27,6 +27,8 @@ module.exports = async function runPostSplitPrCommentStep({ core, github, env = 
       prNumber: env.PR_NUMBER || '',
       splitPrNumber: prNumber,
       commenter: env.COMMENTER_LOGIN || '',
+      commandArgs: env.COMMAND_ARGS || '',
+      extraComment: env.EXTRA_COMMENT || '',
       scopeStripPrefix: env.SCOPE_STRIP_PREFIX || '',
     });
   } catch (error) {

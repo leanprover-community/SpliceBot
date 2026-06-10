@@ -104,6 +104,52 @@ test('runResolveAndAuthorizeCommandStep fails when command-specific authorizatio
   assert.match(messages.failed[0], /not authorized to run label command/);
 });
 
+test('runResolveAndAuthorizeCommandStep authorizes commands with allowlisted args and emits command_args', async () => {
+  const { core, outputs, messages } = createCoreStub();
+
+  await runResolveAndAuthorizeCommandStep({
+    core,
+    github: createGithubStub(),
+    env: {
+      RAW_LABEL_COMMANDS:
+        '[{"command":"maintainer","comment":"maintainer {command_args}\\n\\n{extra_comment}","allowed_args":["merge","merge?","delegate","delegate?"],"min_repo_permission":"triage"}]',
+      TRIGGER_KEYWORD: 'maintainer',
+      TRIGGER_ARGS: 'merge?',
+      COMMENTER_LOGIN: 'reviewer',
+      BASE_REPO: 'leanprover-community/SpliceBot',
+      INPUT_TOKEN: 'token',
+    },
+  });
+
+  assert.equal(outputs.get('trigger_mode'), 'label');
+  assert.equal(outputs.get('label_command'), 'maintainer');
+  assert.equal(outputs.get('command_args'), 'merge?');
+  assert.equal(outputs.get('label_authz_decision'), 'allow');
+  assert.equal(messages.failed.length, 0);
+});
+
+test('runResolveAndAuthorizeCommandStep fails on disallowed args before authorization', async () => {
+  const { core, outputs, messages } = createCoreStub();
+
+  await runResolveAndAuthorizeCommandStep({
+    core,
+    github: createGithubStub(),
+    env: {
+      RAW_LABEL_COMMANDS:
+        '[{"command":"maintainer","comment":"maintainer {command_args}","allowed_args":["merge","delegate"]}]',
+      TRIGGER_KEYWORD: 'maintainer',
+      TRIGGER_ARGS: 'rebase',
+      COMMENTER_LOGIN: 'reviewer',
+      BASE_REPO: 'leanprover-community/SpliceBot',
+      INPUT_TOKEN: 'token',
+    },
+  });
+
+  assert.equal(outputs.get('trigger_mode'), 'invalid_args');
+  assert.equal(outputs.get('label_authz_decision'), undefined);
+  assert.match(messages.failed[0], /Argument 'rebase' is not allowed for command 'maintainer'/);
+});
+
 test('runResolveAndAuthorizeCommandStep authorizes comment-only commands and emits the template', async () => {
   const { core, outputs, messages } = createCoreStub();
 

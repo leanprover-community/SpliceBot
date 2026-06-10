@@ -8,4 +8,6 @@ representative-auth-denial :: not authorized to trigger splice-bot
 invalid-label-command-config-fails-early :: Could not parse label_commands
 label-command-path-enters-split-flow :: Authorized label command 'ready'
 comment-command-path-enters-split-flow :: Authorized label command 'maintainer-merge'
+args-command-path-enters-split-flow :: Authorized label command 'maintainer'
+invalid-command-args-fails-early :: Argument 'rebase' is not allowed for command 'maintainer'
 splice-path-reaches-late-workflow-steps :: Check out BASE

@@ -65,11 +65,28 @@ function renderPrTitle({ template, filePath, prNumber, scopeStripPrefix = '' }) 
   return title;
 }
 
-function buildCommandCommentValues({ filePath, prNumber, splitPrNumber, commenter, scopeStripPrefix = '' }) {
+// {extra_comment} carries reviewer-supplied free text, so it is always rendered
+// as a markdown blockquote: quoted lines cannot start a line that downstream
+// line-anchored comment automation (e.g. mathlib's `^maintainer merge$` matcher)
+// would treat as a command of its own.
+function blockquote(text) {
+  const trimmed = String(text ?? '').trim();
+  if (!trimmed) {
+    return '';
+  }
+  return trimmed
+    .split('\n')
+    .map((line) => (line.trim() ? `> ${line}` : '>'))
+    .join('\n');
+}
+
+function buildCommandCommentValues({ filePath, prNumber, splitPrNumber, commenter, commandArgs, extraComment, scopeStripPrefix = '' }) {
   return {
     ...buildFileValues({ filePath, prNumber, scopeStripPrefix }),
     split_pr_number: String(splitPrNumber ?? ''),
     commenter: String(commenter ?? ''),
+    command_args: String(commandArgs ?? ''),
+    extra_comment: blockquote(extraComment),
   };
 }
 
@@ -79,21 +96,28 @@ function validateCommandCommentTemplate(template) {
   }
   substitutePlaceholders({
     template,
-    values: buildCommandCommentValues({ filePath: '', prNumber: '', splitPrNumber: '', commenter: '' }),
+    values: buildCommandCommentValues({
+      filePath: '',
+      prNumber: '',
+      splitPrNumber: '',
+      commenter: '',
+      commandArgs: '',
+      extraComment: '',
+    }),
     templateName: 'comment',
   });
 }
 
 // Unlike renderPrTitle, this preserves newlines so templates can produce
 // multi-line comment bodies (e.g. a trigger line plus an attribution line).
-function renderCommandComment({ template, filePath, prNumber, splitPrNumber, commenter, scopeStripPrefix = '' }) {
+function renderCommandComment({ template, filePath, prNumber, splitPrNumber, commenter, commandArgs, extraComment, scopeStripPrefix = '' }) {
   if (!template || !template.trim()) {
     throw new Error('comment template is empty.');
   }
 
   const rendered = substitutePlaceholders({
     template,
-    values: buildCommandCommentValues({ filePath, prNumber, splitPrNumber, commenter, scopeStripPrefix }),
+    values: buildCommandCommentValues({ filePath, prNumber, splitPrNumber, commenter, commandArgs, extraComment, scopeStripPrefix }),
     templateName: 'comment',
   });
 

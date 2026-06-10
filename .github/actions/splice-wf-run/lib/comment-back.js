@@ -1,6 +1,7 @@
 function buildCommentBody({
   triggerMode,
   triggerKeyword,
+  triggerArgs,
   triggerResolveError,
   labelCommand,
   labelName,
@@ -55,6 +56,12 @@ function buildCommentBody({
     bodyIntro = triggerResolveError || `No configured splice-bot command matched \`${triggerKeyword}\`.`;
     adviceLines = [
       'Either remove the keyword to run the default split-PR flow, or add a matching entry to `label_commands`.',
+    ];
+  } else if (triggerMode === 'invalid_args') {
+    title = 'Invalid splice-bot command arguments';
+    bodyIntro = triggerResolveError || `The arguments after \`${triggerKeyword}\` did not match the command's \`allowed_args\`.`;
+    adviceLines = [
+      'Re-run the command with one of its allowed arguments, or update `allowed_args` for this command in `label_commands`.',
     ];
   } else if (authzOutcome === 'failure' || authzDecision === 'deny') {
     title = 'Not authorized to trigger splice-bot';
@@ -203,6 +210,10 @@ function buildCommentBody({
     tokenDiagnostics.push(`- trigger keyword: \`${triggerKeyword}\``);
   }
 
+  if (triggerArgs) {
+    tokenDiagnostics.push(`- trigger args: \`${triggerArgs}\``);
+  }
+
   if (labelAuthzTokenSource && labelAuthzTokenSource !== 'unknown') {
     tokenDiagnostics.push(`- label authz token source: \`${labelAuthzTokenSource}\``);
   }
@@ -223,6 +234,7 @@ function buildCallbackCommentPayload(input) {
     repoFull,
     triggerMode,
     triggerKeyword,
+    triggerArgs,
     triggerResolveError,
     labelCommand,
     labelName,
@@ -282,6 +294,7 @@ function buildCallbackCommentPayload(input) {
     body: buildCommentBody({
       triggerMode,
       triggerKeyword,
+      triggerArgs,
       triggerResolveError,
       labelCommand,
       labelName,

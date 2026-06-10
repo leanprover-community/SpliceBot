@@ -181,6 +181,27 @@ function makeLabelCommandPayloadInput(overrides = {}) {
   };
 }
 
+test('buildCallbackCommentPayload reports invalid command arguments with diagnostics', () => {
+  const payload = buildCallbackCommentPayload(
+    makeLabelCommandPayloadInput({
+      triggerMode: 'invalid_args',
+      triggerKeyword: 'maintainer',
+      triggerArgs: 'rebase',
+      triggerResolveError:
+        "Argument 'rebase' is not allowed for command 'maintainer'. Allowed: 'merge', 'merge?'.",
+      labelCommand: '',
+      automatedPrNumber: '',
+      outcomes: [['Resolve configured trigger command', 'failure']],
+    }),
+  );
+
+  assert.match(payload.body, /\*\*Invalid splice-bot command arguments\*\*/);
+  assert.match(payload.body, /Argument 'rebase' is not allowed for command 'maintainer'/);
+  assert.match(payload.body, /Re-run the command with one of its allowed arguments/);
+  assert.match(payload.body, /- trigger keyword: `maintainer`/);
+  assert.match(payload.body, /- trigger args: `rebase`/);
+});
+
 test('buildCallbackCommentPayload reports comment-only command success', () => {
   const payload = buildCallbackCommentPayload(
     makeLabelCommandPayloadInput({ commandCommentConfigured: true }),

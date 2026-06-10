@@ -58,6 +58,45 @@ test('post-split-pr-comment step renders the template and comments on the split 
   assert.deepEqual(core.outputs, {});
 });
 
+test('post-split-pr-comment step threads command args and blockquoted extra comment into the body', async () => {
+  const core = makeCore();
+  const createCommentCalls = [];
+  const github = {
+    rest: {
+      issues: {
+        createComment: async (payload) => {
+          createCommentCalls.push(payload);
+        },
+      },
+    },
+  };
+
+  await runPostSplitPrCommentStep({
+    core,
+    github,
+    env: {
+      REPO_FULL: 'leanprover-community/SpliceBot',
+      COMMENT_TEMPLATE: 'maintainer {command_args}\n\n{extra_comment}\n\n(requested by @{commenter} on #{pr_number})',
+      SPLIT_PR_NUMBER: '99',
+      FILE_PATH: 'Mathlib/Algebra/Group/Defs.lean',
+      PR_NUMBER: '42',
+      COMMENTER_LOGIN: 'reviewer',
+      COMMAND_ARGS: 'merge?',
+      EXTRA_COMMENT: 'Happy to merge once CI is green.',
+    },
+  });
+
+  assert.deepEqual(createCommentCalls, [
+    {
+      owner: 'leanprover-community',
+      repo: 'SpliceBot',
+      issue_number: 99,
+      body: 'maintainer merge?\n\n> Happy to merge once CI is green.\n\n(requested by @reviewer on #42)',
+    },
+  ]);
+  assert.deepEqual(core.failures, []);
+});
+
 test('post-split-pr-comment step reports failure outputs when the API call fails', async () => {
   const core = makeCore();
   const github = {

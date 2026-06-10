@@ -131,6 +131,58 @@ jobs:
           set -euo pipefail
           [ "${{ steps.comment_path.outcome }}" = "failure" ]
 
+  args-command-path-enters-split-flow:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Run args command split-flow case
+        id: args_path
+        continue-on-error: true
+        uses: ./.github/actions/splice-wf-run
+        with:
+          source_workflow: act-harness
+          token: test-token
+          authz_token: test-token
+          allow_pr_author: 'true'
+          label_commands: >-
+            [{"command":"maintainer","comment":"maintainer {command_args}\n\n{extra_comment}\n\n(requested by @{commenter} on #{pr_number})","allowed_args":["merge","merge?","delegate","delegate?"],"min_repo_permission":"anyone"}]
+          bridge_override_json: >-
+            {"meta":{"schema_version":2,"repository":"leanprover-community/SpliceBot","workflow_name":"act-harness","workflow_run_id":"1","workflow_run_attempt":"1","event_name":"pull_request_review_comment","head_sha":"1111111111111111111111111111111111111111","created_at":"2026-03-20T00:00:00Z","pr_number":1,"event":{"comment":{"id":1,"path":"src/Foo.lean","user":{"login":"author"}},"pull_request":{"user":{"login":"author"},"base":{"repo":{"full_name":"example/definitely-does-not-exist"},"ref":"master"},"head":{"repo":{"full_name":"example/definitely-does-not-exist"},"sha":"1111111111111111111111111111111111111111","ref":"feature","label":"author:feature"}}}},"outputs":{"base_ref":"master","trigger_keyword":"maintainer","trigger_args":"merge?","trigger_extra_text":"Happy to merge once CI is green.","committer":"github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>","author":"author <12345+author@users.noreply.github.com>"}}
+
+      - name: Assert args command path failed after entering split flow
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ "${{ steps.args_path.outcome }}" = "failure" ]
+
+  invalid-command-args-fails-early:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Run disallowed args case
+        id: invalid_args
+        continue-on-error: true
+        uses: ./.github/actions/splice-wf-run
+        with:
+          source_workflow: act-harness
+          token: test-token
+          authz_token: test-token
+          allow_pr_author: 'true'
+          label_commands: >-
+            [{"command":"maintainer","comment":"maintainer {command_args}","allowed_args":["merge","merge?","delegate","delegate?"],"min_repo_permission":"anyone"}]
+          bridge_override_json: >-
+            {"meta":{"schema_version":2,"repository":"leanprover-community/SpliceBot","workflow_name":"act-harness","workflow_run_id":"1","workflow_run_attempt":"1","event_name":"pull_request_review_comment","head_sha":"1111111111111111111111111111111111111111","created_at":"2026-03-20T00:00:00Z","pr_number":1,"event":{"comment":{"id":1,"path":"src/Foo.lean","user":{"login":"author"}},"pull_request":{"user":{"login":"author"},"base":{"repo":{"full_name":"example/definitely-does-not-exist"},"ref":"master"},"head":{"repo":{"full_name":"example/definitely-does-not-exist"},"sha":"1111111111111111111111111111111111111111","ref":"feature","label":"author:feature"}}}},"outputs":{"base_ref":"master","trigger_keyword":"maintainer","trigger_args":"rebase","trigger_extra_text":"","committer":"github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>","author":"author <12345+author@users.noreply.github.com>"}}
+
+      - name: Assert disallowed args failed
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ "${{ steps.invalid_args.outcome }}" = "failure" ]
+
   representative-auth-denial:
     runs-on: ubuntu-latest
     steps:

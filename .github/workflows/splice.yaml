@@ -65,22 +65,32 @@ jobs:
             const comment = context.payload?.comment;
             const pr = context.payload?.pull_request;
             const body = comment?.body || "";
-            const triggerLine = body
-              .split(/\r?\n/)
-              .find((line) => /^splice-bot\b/i.test(line));
+            const bodyLines = body.split(/\r?\n/);
+            const triggerLineIndex = bodyLines.findIndex((line) => /^splice-bot\b/i.test(line));
 
             core.info(`Comment body:\n---\n${body}\n---`);
 
             // Start-of-line match across lines; no leading whitespace allowed
-            if (!triggerLine) {
+            if (triggerLineIndex < 0) {
               core.info("No `splice-bot` found at the start of a line, skipping.");
               core.setOutput("skip", "true");
               return;
             }
 
-            const triggerKeyword = triggerLine.replace(/^splice-bot\b/i, "").trim().split(/\s+/)[0] || "";
-            const normalizedTriggerKeyword = triggerKeyword.toLowerCase();
+            // Trigger grammar: `splice-bot <keyword> [args...]`; the first token is the
+            // command keyword, the rest of the trigger line is its arguments, and any
+            // lines after the trigger line are free-text passed along as extra comment.
+            const triggerTokens = bodyLines[triggerLineIndex]
+              .replace(/^splice-bot\b/i, "")
+              .trim()
+              .split(/\s+/)
+              .filter(Boolean);
+            const normalizedTriggerKeyword = (triggerTokens[0] || "").toLowerCase();
+            const triggerArgs = triggerTokens.slice(1).join(" ").toLowerCase();
+            const triggerExtraText = bodyLines.slice(triggerLineIndex + 1).join("\n").trim();
             core.info(`Trigger keyword: ${normalizedTriggerKeyword || "(none)"}`);
+            core.info(`Trigger args: ${triggerArgs || "(none)"}`);
+            core.info(`Trigger extra text: ${triggerExtraText ? `${triggerExtraText.split("\n").length} line(s)` : "(none)"}`);
 
             const path = comment?.path;
             if (!path) {
@@ -121,18 +131,31 @@ jobs:
             // IMPORTANT: base_ref now comes from the reusable workflow input (default master)
             core.setOutput("base_ref", baseRefFromInput);
             core.setOutput("trigger_keyword", normalizedTriggerKeyword);
+            core.setOutput("trigger_args", triggerArgs);
+            core.setOutput("trigger_extra_text", triggerExtraText);
 
       - if: ${{ steps.extract.outputs.skip != 'true' && inputs.emit_bridge_artifact }}
         name: Prepare bridge outputs
+        env:
+          # Comment-derived values are passed through env vars instead of inline
+          # `${{ }}` interpolation so commenter-controlled text cannot inject into
+          # this shell script.
+          TRIGGER_KEYWORD: ${{ steps.extract.outputs.trigger_keyword }}
+          TRIGGER_ARGS: ${{ steps.extract.outputs.trigger_args }}
+          TRIGGER_EXTRA_TEXT: ${{ steps.extract.outputs.trigger_extra_text }}
         run: |
           jq -n \
             --arg base_ref "${{ steps.extract.outputs.base_ref }}" \
-            --arg trigger_keyword "${{ steps.extract.outputs.trigger_keyword }}" \
+            --arg trigger_keyword "$TRIGGER_KEYWORD" \
+            --arg trigger_args "$TRIGGER_ARGS" \
+            --arg trigger_extra_text "$TRIGGER_EXTRA_TEXT" \
             --arg committer "${{ inputs.committer }}" \
             --arg author "${{ inputs.author }}" \
             '{
               base_ref: $base_ref,
               trigger_keyword: $trigger_keyword,
+              trigger_args: $trigger_args,
+              trigger_extra_text: $trigger_extra_text,
               committer: $committer,
               author: $author,
             }' > bridge-outputs.json

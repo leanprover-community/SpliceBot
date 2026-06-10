@@ -24,6 +24,7 @@ module.exports = async function runCommentBackStep({ core, github, env = process
     repoFull: env.REPO_FULL || '',
     triggerMode: env.TRIGGER_MODE || 'splice',
     triggerKeyword: env.TRIGGER_KEYWORD || '',
+    triggerArgs: env.TRIGGER_ARGS || '',
     triggerResolveError: env.TRIGGER_RESOLVE_ERROR || '',
     labelCommand: env.LABEL_COMMAND || '',
     labelName: env.LABEL_NAME || '',

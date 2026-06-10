@@ -26,7 +26,7 @@ inputs:
     required: false
     default: ''
   label_commands:
-    description: Optional JSON array of label command objects ({command|keyword, label?, comment?, min_repo_permission?, allowed_users?, allowed_teams?, type?}); each command needs label and/or comment
+    description: Optional JSON array of label command objects ({command|keyword, label?, comment?, allowed_args?, min_repo_permission?, allowed_users?, allowed_teams?, type?}); each command needs label and/or comment
     required: false
     default: ''
   push_to_fork:
@@ -61,6 +61,11 @@ inputs:
 runs:
   using: composite
   steps:
+    # `outputs.trigger_args` and `outputs.trigger_extra_text` are intentionally NOT in
+    # `extract`: extract mappings hard-fail on missing paths, and artifacts emitted by
+    # older splice.yaml versions lack these keys. They are still available as the
+    # per-key outputs `steps.bridge.outputs.trigger_args` / `trigger_extra_text`,
+    # which resolve to empty strings for older artifacts.
     - name: Consume bridge artifact
       id: bridge
       uses: leanprover-community/privilege-escalation-bridge/consume@v1
@@ -116,6 +121,7 @@ runs:
         ACTION_LIB_PATH: ${{ github.action_path }}/lib/resolve-trigger-command-step.js
         RAW_LABEL_COMMANDS: ${{ inputs.label_commands }}
         TRIGGER_KEYWORD: ${{ steps.bridge.outputs.trigger_keyword }}
+        TRIGGER_ARGS: ${{ steps.bridge.outputs.trigger_args }}
         COMMENTER_LOGIN: ${{ steps.bridge.outputs.commenter_login }}
         BASE_REPO: ${{ steps.bridge.outputs.base_repo }}
         INPUT_TOKEN: ${{ inputs.token }}
@@ -288,6 +294,8 @@ runs:
         FILE_PATH: ${{ steps.bridge.outputs.file_path }}
         PR_NUMBER: ${{ steps.bridge.outputs.pr_number }}
         COMMENTER_LOGIN: ${{ steps.bridge.outputs.commenter_login }}
+        COMMAND_ARGS: ${{ steps.resolve_trigger_command.outputs.command_args }}
+        EXTRA_COMMENT: ${{ steps.bridge.outputs.trigger_extra_text }}
         SCOPE_STRIP_PREFIX: ${{ inputs.scope_strip_prefix }}
       with:
         github-token: ${{ inputs.token || github.token }}
@@ -305,6 +313,7 @@ runs:
         REPO_FULL: ${{ steps.bridge.outputs.base_repo }}
         TRIGGER_MODE: ${{ steps.resolve_trigger_command.outputs.trigger_mode }}
         TRIGGER_KEYWORD: ${{ steps.bridge.outputs.trigger_keyword }}
+        TRIGGER_ARGS: ${{ steps.bridge.outputs.trigger_args }}
         TRIGGER_RESOLVE_ERROR: ${{ steps.resolve_trigger_command.outputs.resolve_error }}
         LABEL_COMMAND: ${{ steps.resolve_trigger_command.outputs.label_command }}
         LABEL_NAME: ${{ steps.resolve_trigger_command.outputs.label_name }}

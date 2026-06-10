@@ -1,7 +1,7 @@
 # `splice-bot`: split part of a PR into a separate PR
 
 SpliceBot creates a **single-file pull request** from an existing PR when a reviewer requests it in a review comment.
-It can also run configured keyword commands such as applying a label when the trigger line is `splice-bot <keyword>`.
+It can also run configured keyword commands such as applying a label when the trigger line is `splice-bot <keyword> [args]`.
 
 It uses a workflow-plus-action pattern:
 
@@ -95,6 +95,14 @@ If you configure label commands, put the keyword after the trigger word:
 splice-bot ready
 ```
 
+A command may also take arguments (the rest of the trigger line) and extra free text (the lines after the trigger line), if its configuration allows them:
+
+```text
+splice-bot maintainer merge?
+
+Happy to merge once CI is green.
+```
+
 If the workflow uses only `github.token`, same-repo operation is possible, but:
 
 - bot-created pushes/PRs generally do not trigger downstream CI
@@ -157,14 +165,21 @@ This produces titles like `chore(Algebra/Group/Defs): automated extraction from 
 
 ## Configured label commands
 
-When a trigger line is `splice-bot <keyword>`, SpliceBot checks `label_commands` in the `splice-wf-run` action before running the default split-PR flow.
+When a trigger line is `splice-bot <keyword> [args]`, SpliceBot checks `label_commands` in the `splice-wf-run` action before running the default split-PR flow.
 If the keyword matches a configured command, it still creates the split PR and then runs the command's configured actions on the generated PR: applying a label, posting a comment, or both.
+
+The trigger comment is parsed as:
+
+- **keyword**: the first token after `splice-bot`
+- **args**: the rest of the trigger line, available as the `{command_args}` placeholder; rejected unless the command declares `allowed_args`
+- **extra comment**: all lines after the trigger line, available as the `{extra_comment}` placeholder
 
 Each command object supports:
 
 - `command` or `keyword`: the token immediately after `splice-bot`
 - `label`: optional label name to apply to the generated split PR
-- `comment`: optional comment template posted on the generated split PR after creation; supports the `{file_path}`, `{file_name}`, `{file_scope}`, and `{pr_number}` placeholders from `pr_title` templates plus `{split_pr_number}` (the generated PR's number) and `{commenter}` (login of the reviewer who triggered the command). Newlines are preserved, so JSON `\n` escapes can build multi-line comments. Unknown placeholders are rejected as invalid configuration.
+- `comment`: optional comment template posted on the generated split PR after creation; supports the `{file_path}`, `{file_name}`, `{file_scope}`, and `{pr_number}` placeholders from `pr_title` templates plus `{split_pr_number}` (the generated PR's number), `{commenter}` (login of the reviewer who triggered the command), `{command_args}` (the validated trigger-line arguments), and `{extra_comment}` (the reviewer's free text after the trigger line). Newlines are preserved, so JSON `\n` escapes can build multi-line comments. Unknown placeholders are rejected as invalid configuration.
+- `allowed_args`: optional allowlist of trigger-line arguments (array or comma/newline-separated string). Matching is case-insensitive with whitespace collapsed. When set, the command requires exactly one of the listed argument strings; when unset, the command accepts no arguments. Either way, unexpected arguments fail the run instead of being silently dropped.
 - `min_repo_permission`: optional command-specific permission floor; one of `disabled`, `anyone`, `triage`, `write`, `maintain`, `admin` and defaults to `write`
 - `allowed_users`: optional command-specific user allowlist
 - `allowed_teams`: optional command-specific team allowlist
@@ -205,6 +220,8 @@ Behavior notes:
 - `splice-bot` with no keyword still runs the normal split-PR flow.
 - `splice-bot <keyword>` is reserved for configured command handling; it does not fall back to the unlabeled split-PR flow.
 - Unknown keywords fail the run and reply back on the PR with guidance.
+- Arguments not matching the command's `allowed_args` (including any arguments on a command without `allowed_args`) fail the run before authorization and reply back on the PR with the allowed values.
+- `{extra_comment}` is always rendered as a markdown blockquote (`> ...`). This is a deliberate safety measure: the reviewer's free text can never start a line in the bot's comment, so it cannot impersonate line-anchored commands that downstream comment automation might act on.
 - Invalid `label_commands` configuration fails the run and replies back on the PR with details.
 - Label commands still require the commenter to satisfy the normal top-level authorization policy first.
 - Command-level auth is also fail-closed.
@@ -218,7 +235,15 @@ Behavior notes:
 
 ### Chaining into comment-triggered automation (e.g. mathlib's `maintainer merge`)
 
-A comment command can hand the split PR off to existing comment-triggered automation. For example, mathlib reviewers can splice a file out of a PR and queue the result for maintainer attention in one review comment (`splice-bot maintainer-merge`) with a command like:
+A comment command can hand the split PR off to existing comment-triggered automation. For example, mathlib reviewers can splice a file out of a PR and queue the result for maintainer attention in one review comment:
+
+```text
+splice-bot maintainer merge?
+
+Happy to merge once CI is green.
+```
+
+with a command like:
 
 ```yaml
 with:
@@ -228,18 +253,22 @@ with:
   label_commands: >-
     [
       {
-        "command": "maintainer-merge",
-        "comment": "maintainer merge\n\nRequested by @{commenter} via splice-bot from #{pr_number}.",
+        "command": "maintainer",
+        "allowed_args": ["merge", "merge?", "delegate", "delegate?"],
+        "comment": "maintainer {command_args}\n\n{extra_comment}\n\nRequested by @{commenter} via splice-bot from #{pr_number}.",
         "min_repo_permission": "disabled",
         "allowed_teams": ["leanprover-community/mathlib-reviewers"]
       }
     ]
 ```
 
-Two caveats when chaining like this:
+This posts `maintainer merge?` on its own line in the bot's comment on the split PR, with the reviewer's extra text quoted below it, so mathlib's `maintainer merge` workflow picks it up and forwards the whole comment (including the quoted text) to Zulip.
+
+Caveats when chaining like this:
 
 - The downstream workflow authorizes the *comment author*, which is the bot account behind `token`, not the reviewer. The downstream workflow must explicitly trust comments from that bot account (mathlib already special-cases trusted bot authors in its bors workflows). SpliceBot's command-level `allowed_teams` check above is what guarantees the bot only posts the comment on behalf of an authorized reviewer.
-- Match the downstream trigger's exact comment format. mathlib's `maintainer merge` parser only matches a line that is exactly `maintainer merge`, so keep the trigger text on its own line (as in the `\n\n` example above) and put attribution on a separate line.
+- Match the downstream trigger's exact comment format. mathlib's `maintainer merge` parser only matches a line that is exactly `maintainer merge` (or `delegate`, with an optional `?`), so keep `maintainer {command_args}` on its own line and put attribution on a separate line. `allowed_args` pins `{command_args}` to the values the downstream parser understands.
+- `{extra_comment}` arrives blockquoted, which keeps the reviewer's free text from being mistaken for a downstream command line while still reading naturally in the forwarded notification.
 
 ## GitHub App token minting in caller job
 
@@ -367,7 +396,7 @@ Permission mapping references:
 | `min_repo_permission` | string | No | `anyone` | Minimum permission threshold: `disabled`, `anyone`, `triage`, `write`, `maintain`, `admin`. |
 | `allowed_teams` | string | No | `''` | Comma/newline-separated team allowlist (`team-slug` or `org/team-slug`). |
 | `allowed_users` | string | No | `''` | Comma/newline-separated GitHub login allowlist. |
-| `label_commands` | string | No | `''` | JSON array of label-command objects (`command`/`keyword`, optional `label`, optional `comment` template, optional `min_repo_permission`, `allowed_users`, `allowed_teams`, `type`). Each command needs `label` and/or `comment`. `min_repo_permission: disabled` means command authorization relies only on the command-level allowlists. |
+| `label_commands` | string | No | `''` | JSON array of label-command objects (`command`/`keyword`, optional `label`, optional `comment` template, optional `allowed_args`, `min_repo_permission`, `allowed_users`, `allowed_teams`, `type`). Each command needs `label` and/or `comment`. `allowed_args` allowlists trigger-line arguments; without it a command accepts none. `min_repo_permission: disabled` means command authorization relies only on the command-level allowlists. |
 | `push_to_fork` | string | No | `''` | Optional fork destination (`owner/repo`) for PR branches. |
 | `maintainer_can_modify` | string | No | `''` | Optional fork-mode override (`"true"`/`"false"`). |
 | `pr_title` | string | No | `chore({file_path}): automated extraction` | Title template for the split PR. Supports `{file_path}`, `{file_name}`, `{file_scope}`, and `{pr_number}` placeholders; unknown placeholders fail the run. |
@@ -408,6 +437,7 @@ References:
 | ------- | ------------ | ------ |
 | `Not authorized to trigger splice-bot` | Commenter does not match configured auth rules | Adjust auth inputs (`allow_pr_author`, `min_repo_permission`, `allowed_users`, `allowed_teams`) or use an authorized account |
 | `Unknown splice-bot command` | Trigger keyword did not match any configured `label_commands` entry | Remove the keyword to run the default split flow, or add the missing command to `label_commands` |
+| `Invalid splice-bot command arguments` | Trigger-line text after the keyword did not match the command's `allowed_args` (or the command accepts no arguments) | Re-run with one of the allowed argument values, or add the argument to the command's `allowed_args` |
 | `Invalid label command configuration` | `label_commands` could not be parsed or validated | Fix the JSON shape so it is an array of objects with `command`/`keyword` plus `label` and/or `comment` (with only supported `comment` placeholders) |
 | `Not authorized to run label command` | Commenter passed the top-level auth rules but did not match the command-specific `allowed_users`, `allowed_teams`, or `min_repo_permission` rules | Adjust the command config or use an account/team with the required access |
 | `Failed to apply label` | Split PR was created, but the workflow token could not add the configured label | Grant `issues: write` / equivalent token scope and verify the label name; the split PR already exists and can be labeled manually |

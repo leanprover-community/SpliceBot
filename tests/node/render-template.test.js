@@ -137,8 +137,40 @@ test('renderCommandComment rejects unknown placeholders and empty templates', ()
   );
 });
 
+test('renderCommandComment substitutes {command_args} and blockquotes {extra_comment}', () => {
+  const body = renderCommandComment({
+    template: 'maintainer {command_args}\n\n{extra_comment}\n\n(requested by @{commenter})',
+    filePath: 'a.lean',
+    prNumber: 1,
+    splitPrNumber: 2,
+    commenter: 'reviewer',
+    commandArgs: 'merge?',
+    extraComment: 'First line\n\nmaintainer merge',
+  });
+
+  assert.equal(
+    body,
+    'maintainer merge?\n\n> First line\n>\n> maintainer merge\n\n(requested by @reviewer)',
+  );
+});
+
+test('renderCommandComment renders an empty {extra_comment} as nothing', () => {
+  const body = renderCommandComment({
+    template: 'maintainer {command_args}\n\n{extra_comment}',
+    filePath: 'a.lean',
+    prNumber: 1,
+    splitPrNumber: 2,
+    commenter: 'reviewer',
+    commandArgs: 'merge',
+    extraComment: '   ',
+  });
+
+  assert.equal(body, 'maintainer merge');
+});
+
 test('validateCommandCommentTemplate accepts supported placeholders and rejects unknown ones', () => {
   validateCommandCommentTemplate('maintainer merge\n\nby @{commenter} from #{pr_number} as #{split_pr_number}');
+  validateCommandCommentTemplate('maintainer {command_args}\n\n{extra_comment}');
   assert.throws(() => validateCommandCommentTemplate('hello {who}'), /Unknown placeholder\(s\) in comment template/);
   assert.throws(() => validateCommandCommentTemplate(''), /comment template is empty/);
 });

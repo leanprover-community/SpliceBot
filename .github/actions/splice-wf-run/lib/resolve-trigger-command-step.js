@@ -8,6 +8,18 @@ function normalizeList(value) {
   return rawItems.map((item) => String(item).trim().toLowerCase()).filter(Boolean);
 }
 
+// Args may contain internal spaces (e.g. "in progress"), so they are compared
+// with whitespace collapsed rather than tokenized.
+function normalizeArgsValue(value) {
+  return String(value ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function normalizeAllowedArgs(value) {
+  if (value == null) return [];
+  const rawItems = Array.isArray(value) ? value : String(value).split(/[\n,]/);
+  return rawItems.map(normalizeArgsValue).filter(Boolean);
+}
+
 function parseLabelCommands(raw) {
   const trimmed = String(raw || '').trim();
   if (!trimmed) return [];
@@ -32,6 +44,14 @@ function parseLabelCommands(raw) {
     const allowedTeams = normalizeList(entry.allowed_teams);
     const type = String(entry.type ?? 'add-label').trim().toLowerCase();
 
+    if (entry.allowed_args != null && !Array.isArray(entry.allowed_args) && typeof entry.allowed_args !== 'string') {
+      throw new Error(`label_commands[${index}] has invalid allowed_args; expected an array or comma/newline-separated string.`);
+    }
+    const allowedArgs = normalizeAllowedArgs(entry.allowed_args);
+    if (entry.allowed_args != null && allowedArgs.length === 0) {
+      throw new Error(`label_commands[${index}] has allowed_args with no usable entries.`);
+    }
+
     if (!keyword) throw new Error(`label_commands[${index}] is missing command/keyword.`);
     if (!label && !comment.trim()) throw new Error(`label_commands[${index}] is missing label and/or comment.`);
     if (entry.comment != null) {
@@ -53,12 +73,14 @@ function parseLabelCommands(raw) {
       min_repo_permission: minRepoPermission,
       allowed_users: allowedUsers,
       allowed_teams: allowedTeams,
+      allowed_args: allowedArgs,
     };
   });
 }
 
-function resolveTriggerCommand({ rawCommands, triggerKeyword }) {
+function resolveTriggerCommand({ rawCommands, triggerKeyword, triggerArgs }) {
   const normalizedTriggerKeyword = String(triggerKeyword || '').trim().toLowerCase();
+  const normalizedTriggerArgs = normalizeArgsValue(triggerArgs);
   if (!normalizedTriggerKeyword) {
     return { trigger_mode: 'splice' };
   }
@@ -93,11 +115,33 @@ function resolveTriggerCommand({ rawCommands, triggerKeyword }) {
     };
   }
 
+  // Fail closed on arguments: a command only accepts the args it explicitly
+  // allowlists, and commands without allowed_args accept none.
+  if (match.allowed_args.length === 0) {
+    if (normalizedTriggerArgs) {
+      return {
+        trigger_mode: 'invalid_args',
+        resolve_error: `Command '${match.command}' does not accept arguments (got '${normalizedTriggerArgs}').`,
+        shouldFail: true,
+      };
+    }
+  } else if (!match.allowed_args.includes(normalizedTriggerArgs)) {
+    const allowedList = match.allowed_args.map((arg) => `'${arg}'`).join(', ');
+    return {
+      trigger_mode: 'invalid_args',
+      resolve_error: normalizedTriggerArgs
+        ? `Argument '${normalizedTriggerArgs}' is not allowed for command '${match.command}'. Allowed: ${allowedList}.`
+        : `Command '${match.command}' requires an argument. Allowed: ${allowedList}.`,
+      shouldFail: true,
+    };
+  }
+
   return {
     trigger_mode: 'label',
     label_command: match.command,
     label_name: match.label,
     comment_template: match.comment,
+    command_args: normalizedTriggerArgs,
     label_min_repo_permission: match.min_repo_permission,
     label_allowed_users_json: JSON.stringify(match.allowed_users),
     label_allowed_teams_json: JSON.stringify(match.allowed_teams),
@@ -124,6 +168,7 @@ function runFromEnvironment(env = process.env) {
   const result = resolveTriggerCommand({
     rawCommands: env.RAW_LABEL_COMMANDS || '',
     triggerKeyword: env.TRIGGER_KEYWORD || '',
+    triggerArgs: env.TRIGGER_ARGS || '',
   });
 
   writeOutputs(result, env.GITHUB_OUTPUT);
@@ -138,6 +183,7 @@ async function runResolveAndAuthorizeCommandStep({ core, github, env = process.e
   const result = resolveTriggerCommand({
     rawCommands: env.RAW_LABEL_COMMANDS || '',
     triggerKeyword: env.TRIGGER_KEYWORD || '',
+    triggerArgs: env.TRIGGER_ARGS || '',
   });
 
   for (const [key, value] of Object.entries(result)) {
