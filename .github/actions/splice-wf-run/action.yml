@@ -65,7 +65,10 @@ runs:
     # `extract`: extract mappings hard-fail on missing paths, and artifacts emitted by
     # older splice.yaml versions lack these keys. They are still available as the
     # per-key outputs `steps.bridge.outputs.trigger_args` / `trigger_extra_text`,
-    # which resolve to empty strings for older artifacts.
+    # which resolve to empty strings for older artifacts. The resolve step also
+    # receives `outputs-json` so it can tell a genuinely missing argument apart from
+    # an old-format artifact that never forwarded one (trigger workflows run from the
+    # PR's merge commit, so open PRs can lag behind a caller-repo pin update).
     - name: Consume bridge artifact
       id: bridge
       uses: leanprover-community/privilege-escalation-bridge/consume@v1
@@ -122,6 +125,7 @@ runs:
         RAW_LABEL_COMMANDS: ${{ inputs.label_commands }}
         TRIGGER_KEYWORD: ${{ steps.bridge.outputs.trigger_keyword }}
         TRIGGER_ARGS: ${{ steps.bridge.outputs.trigger_args }}
+        BRIDGE_OUTPUTS_JSON: ${{ steps.bridge.outputs.outputs-json }}
         COMMENTER_LOGIN: ${{ steps.bridge.outputs.commenter_login }}
         BASE_REPO: ${{ steps.bridge.outputs.base_repo }}
         INPUT_TOKEN: ${{ inputs.token }}

@@ -20,6 +20,26 @@ function normalizeAllowedArgs(value) {
   return rawItems.map(normalizeArgsValue).filter(Boolean);
 }
 
+// Trigger workflows run from the PR's merge commit, so open PRs can keep
+// running a splice.yaml version that predates argument support even after the
+// caller repo updates its pin. Those artifacts lack the trigger_args key
+// entirely; distinguishing "missing key" from "present but empty" lets
+// arg-requiring commands report the version skew instead of a misleading
+// missing-argument error. Returns true/false, or null when the bridge outputs
+// JSON is unavailable or malformed (unknown — keep the generic message).
+function bridgeForwardsTriggerArgs(rawOutputsJson) {
+  const trimmed = String(rawOutputsJson || '').trim();
+  if (!trimmed) return null;
+  let parsed;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  return Object.prototype.hasOwnProperty.call(parsed, 'trigger_args');
+}
+
 function parseLabelCommands(raw) {
   const trimmed = String(raw || '').trim();
   if (!trimmed) return [];
@@ -78,7 +98,7 @@ function parseLabelCommands(raw) {
   });
 }
 
-function resolveTriggerCommand({ rawCommands, triggerKeyword, triggerArgs }) {
+function resolveTriggerCommand({ rawCommands, triggerKeyword, triggerArgs, triggerArgsForwarded = null }) {
   const normalizedTriggerKeyword = String(triggerKeyword || '').trim().toLowerCase();
   const normalizedTriggerArgs = normalizeArgsValue(triggerArgs);
   if (!normalizedTriggerKeyword) {
@@ -127,11 +147,20 @@ function resolveTriggerCommand({ rawCommands, triggerKeyword, triggerArgs }) {
     }
   } else if (!match.allowed_args.includes(normalizedTriggerArgs)) {
     const allowedList = match.allowed_args.map((arg) => `'${arg}'`).join(', ');
+    let resolveError;
+    if (normalizedTriggerArgs) {
+      resolveError = `Argument '${normalizedTriggerArgs}' is not allowed for command '${match.command}'. Allowed: ${allowedList}.`;
+    } else if (triggerArgsForwarded === false) {
+      resolveError =
+        `Command '${match.command}' requires an argument, but the trigger workflow run predates argument support ` +
+        'and did not forward any. Update the PR branch (e.g. merge the latest base branch) so the trigger workflow ' +
+        `runs its current version, then retry. Allowed: ${allowedList}.`;
+    } else {
+      resolveError = `Command '${match.command}' requires an argument. Allowed: ${allowedList}.`;
+    }
     return {
       trigger_mode: 'invalid_args',
-      resolve_error: normalizedTriggerArgs
-        ? `Argument '${normalizedTriggerArgs}' is not allowed for command '${match.command}'. Allowed: ${allowedList}.`
-        : `Command '${match.command}' requires an argument. Allowed: ${allowedList}.`,
+      resolve_error: resolveError,
       shouldFail: true,
     };
   }
@@ -169,6 +198,7 @@ function runFromEnvironment(env = process.env) {
     rawCommands: env.RAW_LABEL_COMMANDS || '',
     triggerKeyword: env.TRIGGER_KEYWORD || '',
     triggerArgs: env.TRIGGER_ARGS || '',
+    triggerArgsForwarded: bridgeForwardsTriggerArgs(env.BRIDGE_OUTPUTS_JSON),
   });
 
   writeOutputs(result, env.GITHUB_OUTPUT);
@@ -184,6 +214,7 @@ async function runResolveAndAuthorizeCommandStep({ core, github, env = process.e
     rawCommands: env.RAW_LABEL_COMMANDS || '',
     triggerKeyword: env.TRIGGER_KEYWORD || '',
     triggerArgs: env.TRIGGER_ARGS || '',
+    triggerArgsForwarded: bridgeForwardsTriggerArgs(env.BRIDGE_OUTPUTS_JSON),
   });
 
   for (const [key, value] of Object.entries(result)) {
@@ -254,6 +285,7 @@ if (require.main === module) {
 
 module.exports = {
   normalizeList,
+  bridgeForwardsTriggerArgs,
   parseLabelCommands,
   resolveTriggerCommand,
   runFromEnvironment,
