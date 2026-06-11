@@ -1,10 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const {
-  bridgeForwardsTriggerArgs,
-  resolveTriggerCommand,
-} = require('../../.github/actions/splice-wf-run/lib/resolve-trigger-command-step');
+const { resolveTriggerCommand } = require('../../.github/actions/splice-wf-run/lib/resolve-trigger-command-step');
 
 test('resolveTriggerCommand matches configured label commands case-insensitively', () => {
   const result = resolveTriggerCommand({
@@ -134,55 +131,6 @@ test('resolveTriggerCommand requires an argument when allowed_args is configured
   assert.equal(result.trigger_mode, 'invalid_args');
   assert.equal(result.shouldFail, true);
   assert.match(result.resolve_error, /Command 'maintainer' requires an argument/);
-});
-
-test('resolveTriggerCommand reports version skew when an old-format bridge omits trigger_args', () => {
-  const result = resolveTriggerCommand({
-    rawCommands: '[{"command":"maintainer","comment":"maintainer {command_args}","allowed_args":["merge"]}]',
-    triggerKeyword: 'maintainer',
-    triggerArgs: '',
-    triggerArgsForwarded: false,
-  });
-
-  assert.equal(result.trigger_mode, 'invalid_args');
-  assert.equal(result.shouldFail, true);
-  assert.match(result.resolve_error, /predates argument support/);
-  assert.match(result.resolve_error, /Update the PR branch/);
-  assert.match(result.resolve_error, /'merge'/);
-});
-
-test('resolveTriggerCommand keeps the plain missing-argument error for current-format bridges', () => {
-  const result = resolveTriggerCommand({
-    rawCommands: '[{"command":"maintainer","comment":"maintainer {command_args}","allowed_args":["merge"]}]',
-    triggerKeyword: 'maintainer',
-    triggerArgs: '',
-    triggerArgsForwarded: true,
-  });
-
-  assert.equal(result.trigger_mode, 'invalid_args');
-  assert.match(result.resolve_error, /^Command 'maintainer' requires an argument\. Allowed:/);
-  assert.doesNotMatch(result.resolve_error, /predates argument support/);
-});
-
-test('resolveTriggerCommand still resolves old-format bridges for commands without allowed_args', () => {
-  const result = resolveTriggerCommand({
-    rawCommands: '[{"command":"ready","label":"ready-to-merge"}]',
-    triggerKeyword: 'ready',
-    triggerArgs: '',
-    triggerArgsForwarded: false,
-  });
-
-  assert.equal(result.trigger_mode, 'label');
-  assert.equal(result.label_command, 'ready');
-});
-
-test('bridgeForwardsTriggerArgs distinguishes missing keys from empty values', () => {
-  assert.equal(bridgeForwardsTriggerArgs('{"trigger_keyword":"maintainer","trigger_args":""}'), true);
-  assert.equal(bridgeForwardsTriggerArgs('{"trigger_keyword":"maintainer"}'), false);
-  assert.equal(bridgeForwardsTriggerArgs(''), null);
-  assert.equal(bridgeForwardsTriggerArgs(undefined), null);
-  assert.equal(bridgeForwardsTriggerArgs('not json'), null);
-  assert.equal(bridgeForwardsTriggerArgs('["trigger_args"]'), null);
 });
 
 test('resolveTriggerCommand rejects args for commands without allowed_args', () => {

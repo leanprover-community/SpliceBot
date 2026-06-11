@@ -80,6 +80,10 @@ jobs:
             // Trigger grammar: `splice-bot <keyword> [args...]`; the first token is the
             // command keyword, the rest of the trigger line is its arguments, and any
             // lines after the trigger line are free-text passed along as extra comment.
+            // NOTE: current splice-wf-run pins ignore these parsed values — the
+            // privileged stage re-fetches the comment and parses it with
+            // lib/parse-trigger-comment.js (the grammar's source of truth, kept in
+            // sync with this). They are still emitted for older action pins.
             const triggerTokens = bodyLines[triggerLineIndex]
               .replace(/^splice-bot\b/i, "")
               .trim()

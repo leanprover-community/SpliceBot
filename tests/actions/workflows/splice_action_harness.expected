@@ -10,5 +10,6 @@ label-command-path-enters-split-flow :: Authorized label command 'ready'
 comment-command-path-enters-split-flow :: Authorized label command 'maintainer-merge'
 args-command-path-enters-split-flow :: Authorized label command 'maintainer'
 invalid-command-args-fails-early :: Argument 'rebase' is not allowed for command 'maintainer'
-stale-bridge-missing-args-reports-version-skew :: predates argument support
+stale-bridge-without-args-resolves-from-body :: Authorized label command 'maintainer'
+edited-comment-without-trigger-noops :: nothing to do
 splice-path-reaches-late-workflow-steps :: Check out BASE

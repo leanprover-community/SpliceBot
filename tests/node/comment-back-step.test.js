@@ -149,10 +149,12 @@ test('comment-back step skips cleanly when the PR number is invalid', async () =
 test('collectStepOutcomes builds labeled outcomes from env vars', () => {
   assert.deepEqual(collectStepOutcomes({
     BRIDGE_OUTCOME: 'success',
+    FETCH_TRIGGER_COMMENT_OUTCOME: 'success',
     CHECKOUT_BASE_OUTCOME: 'failure',
     CPR_OUTCOME: 'cancelled',
   }), [
     ['Consume bridge artifact', 'success'],
+    ['Fetch and parse trigger comment', 'success'],
     ['Resolve configured trigger command', ''],
     ['Authorize commenter', ''],
     ['Check out BASE', 'failure'],

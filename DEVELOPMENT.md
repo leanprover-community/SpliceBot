@@ -9,7 +9,7 @@ For installing and configuring SpliceBot in your own repository, see the [README
 
 Reusable workflows:
 
-- `.github/workflows/splice.yaml` (unprivileged event parser + bridge emitter)
+- `.github/workflows/splice.yaml` (unprivileged trigger detector + bridge emitter; the privileged action re-fetches the comment and parses the trigger grammar itself, see `lib/parse-trigger-comment.js`)
 
 Actions:
 

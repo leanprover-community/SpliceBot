@@ -45,7 +45,7 @@ jobs:
           authz_token: test-token
           allow_pr_author: 'true'
           bridge_override_json: >-
-            {"meta":{"schema_version":2,"repository":"leanprover-community/SpliceBot","workflow_name":"act-harness","workflow_run_id":"1","workflow_run_attempt":"1","event_name":"pull_request_review_comment","head_sha":"1111111111111111111111111111111111111111","created_at":"2026-03-20T00:00:00Z","pr_number":1,"event":{"comment":{"id":1,"path":"src/Foo.lean","user":{"login":"author"}},"pull_request":{"user":{"login":"author"},"base":{"repo":{"full_name":"example/definitely-does-not-exist"},"ref":"master"},"head":{"repo":{"full_name":"example/definitely-does-not-exist"},"sha":"1111111111111111111111111111111111111111","ref":"feature","label":"author:feature"}}}},"outputs":{"base_ref":"master","trigger_keyword":"","committer":"github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>","author":"author <12345+author@users.noreply.github.com>"}}
+            {"meta":{"schema_version":2,"repository":"leanprover-community/SpliceBot","workflow_name":"act-harness","workflow_run_id":"1","workflow_run_attempt":"1","event_name":"pull_request_review_comment","head_sha":"1111111111111111111111111111111111111111","created_at":"2026-03-20T00:00:00Z","pr_number":1,"event":{"comment":{"id":1,"body":"splice-bot","path":"src/Foo.lean","user":{"login":"author"}},"pull_request":{"user":{"login":"author"},"base":{"repo":{"full_name":"example/definitely-does-not-exist"},"ref":"master"},"head":{"repo":{"full_name":"example/definitely-does-not-exist"},"sha":"1111111111111111111111111111111111111111","ref":"feature","label":"author:feature"}}}},"outputs":{"base_ref":"master","trigger_keyword":"","committer":"github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>","author":"author <12345+author@users.noreply.github.com>"}}
 
       - name: Assert splice path failed only after early workflow setup
         shell: bash
@@ -71,7 +71,7 @@ jobs:
           label_commands: >-
             [not valid json
           bridge_override_json: >-
-            {"meta":{"schema_version":2,"repository":"leanprover-community/SpliceBot","workflow_name":"act-harness","workflow_run_id":"1","workflow_run_attempt":"1","event_name":"pull_request_review_comment","head_sha":"1111111111111111111111111111111111111111","created_at":"2026-03-20T00:00:00Z","pr_number":1,"event":{"comment":{"id":1,"path":"src/Foo.lean","user":{"login":"author"}},"pull_request":{"user":{"login":"author"},"base":{"repo":{"full_name":"example/definitely-does-not-exist"},"ref":"master"},"head":{"repo":{"full_name":"example/definitely-does-not-exist"},"sha":"1111111111111111111111111111111111111111","ref":"feature","label":"author:feature"}}}},"outputs":{"base_ref":"master","trigger_keyword":"ready","committer":"github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>","author":"author <12345+author@users.noreply.github.com>"}}
+            {"meta":{"schema_version":2,"repository":"leanprover-community/SpliceBot","workflow_name":"act-harness","workflow_run_id":"1","workflow_run_attempt":"1","event_name":"pull_request_review_comment","head_sha":"1111111111111111111111111111111111111111","created_at":"2026-03-20T00:00:00Z","pr_number":1,"event":{"comment":{"id":1,"body":"splice-bot ready","path":"src/Foo.lean","user":{"login":"author"}},"pull_request":{"user":{"login":"author"},"base":{"repo":{"full_name":"example/definitely-does-not-exist"},"ref":"master"},"head":{"repo":{"full_name":"example/definitely-does-not-exist"},"sha":"1111111111111111111111111111111111111111","ref":"feature","label":"author:feature"}}}},"outputs":{"base_ref":"master","trigger_keyword":"ready","committer":"github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>","author":"author <12345+author@users.noreply.github.com>"}}
 
       - name: Assert invalid label config failed
         shell: bash
@@ -97,7 +97,7 @@ jobs:
           label_commands: >-
             [{"command":"ready","label":"ready-to-merge","min_repo_permission":"anyone"}]
           bridge_override_json: >-
-            {"meta":{"schema_version":2,"repository":"leanprover-community/SpliceBot","workflow_name":"act-harness","workflow_run_id":"1","workflow_run_attempt":"1","event_name":"pull_request_review_comment","head_sha":"1111111111111111111111111111111111111111","created_at":"2026-03-20T00:00:00Z","pr_number":1,"event":{"comment":{"id":1,"path":"src/Foo.lean","user":{"login":"author"}},"pull_request":{"user":{"login":"author"},"base":{"repo":{"full_name":"example/definitely-does-not-exist"},"ref":"master"},"head":{"repo":{"full_name":"example/definitely-does-not-exist"},"sha":"1111111111111111111111111111111111111111","ref":"feature","label":"author:feature"}}}},"outputs":{"base_ref":"master","trigger_keyword":"ready","committer":"github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>","author":"author <12345+author@users.noreply.github.com>"}}
+            {"meta":{"schema_version":2,"repository":"leanprover-community/SpliceBot","workflow_name":"act-harness","workflow_run_id":"1","workflow_run_attempt":"1","event_name":"pull_request_review_comment","head_sha":"1111111111111111111111111111111111111111","created_at":"2026-03-20T00:00:00Z","pr_number":1,"event":{"comment":{"id":1,"body":"splice-bot ready","path":"src/Foo.lean","user":{"login":"author"}},"pull_request":{"user":{"login":"author"},"base":{"repo":{"full_name":"example/definitely-does-not-exist"},"ref":"master"},"head":{"repo":{"full_name":"example/definitely-does-not-exist"},"sha":"1111111111111111111111111111111111111111","ref":"feature","label":"author:feature"}}}},"outputs":{"base_ref":"master","trigger_keyword":"ready","committer":"github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>","author":"author <12345+author@users.noreply.github.com>"}}
 
       - name: Assert label command path failed after entering split flow
         shell: bash
@@ -123,7 +123,7 @@ jobs:
           label_commands: >-
             [{"command":"maintainer-merge","comment":"maintainer merge\n\nRequested by @{commenter} via splice-bot from #{pr_number}.","min_repo_permission":"anyone"}]
           bridge_override_json: >-
-            {"meta":{"schema_version":2,"repository":"leanprover-community/SpliceBot","workflow_name":"act-harness","workflow_run_id":"1","workflow_run_attempt":"1","event_name":"pull_request_review_comment","head_sha":"1111111111111111111111111111111111111111","created_at":"2026-03-20T00:00:00Z","pr_number":1,"event":{"comment":{"id":1,"path":"src/Foo.lean","user":{"login":"author"}},"pull_request":{"user":{"login":"author"},"base":{"repo":{"full_name":"example/definitely-does-not-exist"},"ref":"master"},"head":{"repo":{"full_name":"example/definitely-does-not-exist"},"sha":"1111111111111111111111111111111111111111","ref":"feature","label":"author:feature"}}}},"outputs":{"base_ref":"master","trigger_keyword":"maintainer-merge","committer":"github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>","author":"author <12345+author@users.noreply.github.com>"}}
+            {"meta":{"schema_version":2,"repository":"leanprover-community/SpliceBot","workflow_name":"act-harness","workflow_run_id":"1","workflow_run_attempt":"1","event_name":"pull_request_review_comment","head_sha":"1111111111111111111111111111111111111111","created_at":"2026-03-20T00:00:00Z","pr_number":1,"event":{"comment":{"id":1,"body":"splice-bot maintainer-merge","path":"src/Foo.lean","user":{"login":"author"}},"pull_request":{"user":{"login":"author"},"base":{"repo":{"full_name":"example/definitely-does-not-exist"},"ref":"master"},"head":{"repo":{"full_name":"example/definitely-does-not-exist"},"sha":"1111111111111111111111111111111111111111","ref":"feature","label":"author:feature"}}}},"outputs":{"base_ref":"master","trigger_keyword":"maintainer-merge","committer":"github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>","author":"author <12345+author@users.noreply.github.com>"}}
 
       - name: Assert comment command path failed after entering split flow
         shell: bash
@@ -149,7 +149,7 @@ jobs:
           label_commands: >-
             [{"command":"maintainer","comment":"maintainer {command_args}\n\n{extra_comment}\n\n(requested by @{commenter} on #{pr_number})","allowed_args":["merge","merge?","delegate","delegate?"],"min_repo_permission":"anyone"}]
           bridge_override_json: >-
-            {"meta":{"schema_version":2,"repository":"leanprover-community/SpliceBot","workflow_name":"act-harness","workflow_run_id":"1","workflow_run_attempt":"1","event_name":"pull_request_review_comment","head_sha":"1111111111111111111111111111111111111111","created_at":"2026-03-20T00:00:00Z","pr_number":1,"event":{"comment":{"id":1,"path":"src/Foo.lean","user":{"login":"author"}},"pull_request":{"user":{"login":"author"},"base":{"repo":{"full_name":"example/definitely-does-not-exist"},"ref":"master"},"head":{"repo":{"full_name":"example/definitely-does-not-exist"},"sha":"1111111111111111111111111111111111111111","ref":"feature","label":"author:feature"}}}},"outputs":{"base_ref":"master","trigger_keyword":"maintainer","trigger_args":"merge?","trigger_extra_text":"Happy to merge once CI is green.","committer":"github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>","author":"author <12345+author@users.noreply.github.com>"}}
+            {"meta":{"schema_version":2,"repository":"leanprover-community/SpliceBot","workflow_name":"act-harness","workflow_run_id":"1","workflow_run_attempt":"1","event_name":"pull_request_review_comment","head_sha":"1111111111111111111111111111111111111111","created_at":"2026-03-20T00:00:00Z","pr_number":1,"event":{"comment":{"id":1,"body":"splice-bot maintainer merge?\nHappy to merge once CI is green.","path":"src/Foo.lean","user":{"login":"author"}},"pull_request":{"user":{"login":"author"},"base":{"repo":{"full_name":"example/definitely-does-not-exist"},"ref":"master"},"head":{"repo":{"full_name":"example/definitely-does-not-exist"},"sha":"1111111111111111111111111111111111111111","ref":"feature","label":"author:feature"}}}},"outputs":{"base_ref":"master","trigger_keyword":"maintainer","trigger_args":"merge?","trigger_extra_text":"Happy to merge once CI is green.","committer":"github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>","author":"author <12345+author@users.noreply.github.com>"}}
 
       - name: Assert args command path failed after entering split flow
         shell: bash
@@ -175,7 +175,7 @@ jobs:
           label_commands: >-
             [{"command":"maintainer","comment":"maintainer {command_args}","allowed_args":["merge","merge?","delegate","delegate?"],"min_repo_permission":"anyone"}]
           bridge_override_json: >-
-            {"meta":{"schema_version":2,"repository":"leanprover-community/SpliceBot","workflow_name":"act-harness","workflow_run_id":"1","workflow_run_attempt":"1","event_name":"pull_request_review_comment","head_sha":"1111111111111111111111111111111111111111","created_at":"2026-03-20T00:00:00Z","pr_number":1,"event":{"comment":{"id":1,"path":"src/Foo.lean","user":{"login":"author"}},"pull_request":{"user":{"login":"author"},"base":{"repo":{"full_name":"example/definitely-does-not-exist"},"ref":"master"},"head":{"repo":{"full_name":"example/definitely-does-not-exist"},"sha":"1111111111111111111111111111111111111111","ref":"feature","label":"author:feature"}}}},"outputs":{"base_ref":"master","trigger_keyword":"maintainer","trigger_args":"rebase","trigger_extra_text":"","committer":"github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>","author":"author <12345+author@users.noreply.github.com>"}}
+            {"meta":{"schema_version":2,"repository":"leanprover-community/SpliceBot","workflow_name":"act-harness","workflow_run_id":"1","workflow_run_attempt":"1","event_name":"pull_request_review_comment","head_sha":"1111111111111111111111111111111111111111","created_at":"2026-03-20T00:00:00Z","pr_number":1,"event":{"comment":{"id":1,"body":"splice-bot maintainer rebase","path":"src/Foo.lean","user":{"login":"author"}},"pull_request":{"user":{"login":"author"},"base":{"repo":{"full_name":"example/definitely-does-not-exist"},"ref":"master"},"head":{"repo":{"full_name":"example/definitely-does-not-exist"},"sha":"1111111111111111111111111111111111111111","ref":"feature","label":"author:feature"}}}},"outputs":{"base_ref":"master","trigger_keyword":"maintainer","trigger_args":"rebase","trigger_extra_text":"","committer":"github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>","author":"author <12345+author@users.noreply.github.com>"}}
 
       - name: Assert disallowed args failed
         shell: bash
@@ -183,14 +183,16 @@ jobs:
           set -euo pipefail
           [ "${{ steps.invalid_args.outcome }}" = "failure" ]
 
-  stale-bridge-missing-args-reports-version-skew:
+  stale-bridge-without-args-resolves-from-body:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       # Old splice.yaml versions emit bridge outputs without trigger_args at
-      # all; an arg-requiring command must fail with the version-skew message.
+      # all; the action must resolve the args from the re-fetched comment body
+      # and enter the split flow anyway (then fail at checkout like the other
+      # split-flow jobs).
       - name: Run stale bridge without trigger_args case
         id: stale_bridge
         continue-on-error: true
@@ -203,13 +205,39 @@ jobs:
           label_commands: >-
             [{"command":"maintainer","comment":"maintainer {command_args}","allowed_args":["merge","merge?","delegate","delegate?"],"min_repo_permission":"anyone"}]
           bridge_override_json: >-
-            {"meta":{"schema_version":2,"repository":"leanprover-community/SpliceBot","workflow_name":"act-harness","workflow_run_id":"1","workflow_run_attempt":"1","event_name":"pull_request_review_comment","head_sha":"1111111111111111111111111111111111111111","created_at":"2026-03-20T00:00:00Z","pr_number":1,"event":{"comment":{"id":1,"path":"src/Foo.lean","user":{"login":"author"}},"pull_request":{"user":{"login":"author"},"base":{"repo":{"full_name":"example/definitely-does-not-exist"},"ref":"master"},"head":{"repo":{"full_name":"example/definitely-does-not-exist"},"sha":"1111111111111111111111111111111111111111","ref":"feature","label":"author:feature"}}}},"outputs":{"base_ref":"master","trigger_keyword":"maintainer","committer":"github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>","author":"author <12345+author@users.noreply.github.com>"}}
+            {"meta":{"schema_version":2,"repository":"leanprover-community/SpliceBot","workflow_name":"act-harness","workflow_run_id":"1","workflow_run_attempt":"1","event_name":"pull_request_review_comment","head_sha":"1111111111111111111111111111111111111111","created_at":"2026-03-20T00:00:00Z","pr_number":1,"event":{"comment":{"id":1,"body":"splice-bot maintainer merge?","path":"src/Foo.lean","user":{"login":"author"}},"pull_request":{"user":{"login":"author"},"base":{"repo":{"full_name":"example/definitely-does-not-exist"},"ref":"master"},"head":{"repo":{"full_name":"example/definitely-does-not-exist"},"sha":"1111111111111111111111111111111111111111","ref":"feature","label":"author:feature"}}}},"outputs":{"base_ref":"master","trigger_keyword":"maintainer","committer":"github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>","author":"author <12345+author@users.noreply.github.com>"}}
 
-      - name: Assert stale bridge case failed
+      - name: Assert stale bridge case failed after entering split flow
         shell: bash
         run: |
           set -euo pipefail
           [ "${{ steps.stale_bridge.outcome }}" = "failure" ]
+
+  edited-comment-without-trigger-noops:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      # If the comment was edited so the trigger line is gone by the time the
+      # privileged stage fetches it, the action must succeed as a no-op.
+      - name: Run edited comment case
+        id: edited_comment
+        continue-on-error: true
+        uses: ./.github/actions/splice-wf-run
+        with:
+          source_workflow: act-harness
+          token: test-token
+          authz_token: test-token
+          allow_pr_author: 'true'
+          bridge_override_json: >-
+            {"meta":{"schema_version":2,"repository":"leanprover-community/SpliceBot","workflow_name":"act-harness","workflow_run_id":"1","workflow_run_attempt":"1","event_name":"pull_request_review_comment","head_sha":"1111111111111111111111111111111111111111","created_at":"2026-03-20T00:00:00Z","pr_number":1,"event":{"comment":{"id":1,"body":"this comment no longer asks for anything","path":"src/Foo.lean","user":{"login":"author"}},"pull_request":{"user":{"login":"author"},"base":{"repo":{"full_name":"example/definitely-does-not-exist"},"ref":"master"},"head":{"repo":{"full_name":"example/definitely-does-not-exist"},"sha":"1111111111111111111111111111111111111111","ref":"feature","label":"author:feature"}}}},"outputs":{"base_ref":"master","trigger_keyword":"","committer":"github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>","author":"author <12345+author@users.noreply.github.com>"}}
+
+      - name: Assert edited comment case succeeded as a no-op
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ "${{ steps.edited_comment.outcome }}" = "success" ]
 
   representative-auth-denial:
     runs-on: ubuntu-latest
@@ -227,7 +255,7 @@ jobs:
           authz_token: test-token
           min_repo_permission: disabled
           bridge_override_json: >-
-            {"meta":{"schema_version":2,"repository":"leanprover-community/SpliceBot","workflow_name":"act-harness","workflow_run_id":"1","workflow_run_attempt":"1","event_name":"pull_request_review_comment","head_sha":"1111111111111111111111111111111111111111","created_at":"2026-03-20T00:00:00Z","pr_number":1,"event":{"comment":{"id":1,"path":"src/Foo.lean","user":{"login":"reviewer"}},"pull_request":{"user":{"login":"author"},"base":{"repo":{"full_name":"leanprover-community/SpliceBot"},"ref":"master"},"head":{"repo":{"full_name":"leanprover-community/SpliceBot"},"sha":"1111111111111111111111111111111111111111","ref":"feature","label":"author:feature"}}}},"outputs":{"base_ref":"master","trigger_keyword":"","committer":"github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>","author":"author <12345+author@users.noreply.github.com>"}}
+            {"meta":{"schema_version":2,"repository":"leanprover-community/SpliceBot","workflow_name":"act-harness","workflow_run_id":"1","workflow_run_attempt":"1","event_name":"pull_request_review_comment","head_sha":"1111111111111111111111111111111111111111","created_at":"2026-03-20T00:00:00Z","pr_number":1,"event":{"comment":{"id":1,"body":"splice-bot","path":"src/Foo.lean","user":{"login":"reviewer"}},"pull_request":{"user":{"login":"author"},"base":{"repo":{"full_name":"leanprover-community/SpliceBot"},"ref":"master"},"head":{"repo":{"full_name":"leanprover-community/SpliceBot"},"sha":"1111111111111111111111111111111111111111","ref":"feature","label":"author:feature"}}}},"outputs":{"base_ref":"master","trigger_keyword":"","committer":"github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>","author":"author <12345+author@users.noreply.github.com>"}}
 
       - name: Assert authorization denial failed
         shell: bash

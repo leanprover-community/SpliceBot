@@ -4,6 +4,7 @@ const { deriveTokenSources } = require('./token-sources');
 function collectStepOutcomes(env = process.env) {
   return [
     ['Consume bridge artifact', env.BRIDGE_OUTCOME || ''],
+    ['Fetch and parse trigger comment', env.FETCH_TRIGGER_COMMENT_OUTCOME || ''],
     ['Resolve configured trigger command', env.RESOLVE_TRIGGER_COMMAND_OUTCOME || ''],
     ['Authorize commenter', env.AUTHORIZE_COMMENTER_OUTCOME || ''],
     ['Check out BASE', env.CHECKOUT_BASE_OUTCOME || ''],
