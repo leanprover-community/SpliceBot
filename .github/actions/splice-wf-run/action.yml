@@ -69,7 +69,7 @@ runs:
     # commenter identity, and PR metadata.
     - name: Consume bridge artifact
       id: bridge
-      uses: leanprover-community/privilege-escalation-bridge/consume@v1
+      uses: leanprover-community/privilege-escalation-bridge/consume@ea7d63d1c8ece92a8e89b6a6d8fda40603167a91 # v1
       with:
         token: ${{ inputs.token || github.token }}
         artifact: workflow-data
