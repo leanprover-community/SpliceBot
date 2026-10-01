@@ -1,4 +1,5 @@
 function buildCommentBody({
+  contextError,
   triggerMode,
   triggerKeyword,
   triggerArgs,
@@ -38,7 +39,11 @@ function buildCommentBody({
   let adviceLines = [];
   let bodyIntro = '';
 
-  if (!filePath) {
+  if (contextError) {
+    title = 'Cannot split this file';
+    bodyIntro = contextError;
+    adviceLines = ['See the run logs below for details.'];
+  } else if (!filePath) {
     title = 'Could not determine target file';
     bodyIntro = 'I could not determine which file this review comment is on.';
     adviceLines = [
@@ -154,9 +159,6 @@ function buildCommentBody({
     if (failedStepNames.includes('Consume bridge artifact')) {
       adviceLines.push('Ensure the source workflow uploaded `workflow-data` and this workflow is consuming the correct `source_workflow`.');
     }
-    if (failedStepNames.includes('Read trigger comment and PR')) {
-      adviceLines.push('Check the "Read trigger comment and PR" logs; for example, the pull request\'s head repository may have been deleted.');
-    }
     if (failedStepNames.includes('Check out BASE') || failedStepNames.includes('Check out HEAD')) {
       adviceLines.push('Verify the token used by checkout can read both base/head repos and that the referenced refs/SHAs still exist.');
     }
@@ -235,6 +237,7 @@ function buildCallbackCommentPayload(input) {
     originalPrNumber,
     reviewCommentId,
     repoFull,
+    contextError,
     triggerMode,
     triggerKeyword,
     triggerArgs,
@@ -295,6 +298,7 @@ function buildCallbackCommentPayload(input) {
     originalPrNumber,
     reviewCommentId,
     body: buildCommentBody({
+      contextError,
       triggerMode,
       triggerKeyword,
       triggerArgs,

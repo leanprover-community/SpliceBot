@@ -257,3 +257,34 @@ test('buildCallbackCommentPayload reports combined label and comment failures', 
   assert.match(payload.body, /label boom/);
   assert.match(payload.body, /comment boom/);
 });
+
+test('buildCallbackCommentPayload reports a trigger-context error verbatim', () => {
+  const payload = buildCallbackCommentPayload({
+    originalPrNumber: 42,
+    reviewCommentId: 7,
+    repoFull: 'leanprover-community/SpliceBot',
+    contextError: 'PR #42 has changed since the commit this comment is attached to (`3333333`; the PR is now at `4444444`).',
+    filePath: 'src/Foo.lean',
+    applyFailed: false,
+    noChanges: false,
+    automatedPrNumber: '',
+    baseRef: 'master',
+    headRef: 'feature',
+    headLabel: '',
+    runUrl: 'https://example.test/run',
+    tokenSource: 'inputs.token',
+    branchTokenSource: 'not-applicable',
+    authzOutcome: '',
+    authzDecision: '',
+    authzReason: '',
+    authzDetails: '',
+    authzTokenSource: 'github.token',
+    forkOwner: '',
+    forkOwnerType: '',
+    outcomes: [['Read trigger comment and PR', 'failure']],
+  });
+
+  assert.match(payload.body, /\*\*Cannot split this file\*\*/);
+  assert.match(payload.body, /PR #42 has changed since the commit this comment is attached to/);
+  assert.match(payload.body, /Failed step\(s\): Read trigger comment and PR\./);
+});

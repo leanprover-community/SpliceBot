@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
+  bindToCommentCommit,
   resolveTriggerContext,
   verifiedFromOverride,
 } = require('../../.github/actions/splice-wf-run/lib/trigger-context');
@@ -57,7 +58,7 @@ test('resolveTriggerContext builds the context from verified values and the curr
     pr_author_login: 'author',
     base_ref: 'master',
     head_repo: 'author/mathlib4',
-    head_sha: '4444444444444444444444444444444444444444',
+    pr_head_sha: '4444444444444444444444444444444444444444',
     head_ref: 'feature-branch',
     head_label: 'author:feature-branch',
   });
@@ -128,6 +129,7 @@ test('resolveTriggerContext fails closed on other missing values', () => {
     [{ pr: { author: '' } }, 'o/r', /the pull request has no author/],
     [{ pr: { base_ref: '' } }, 'o/r', /the pull request has no base branch/],
     [{ pr: { head_sha: '' } }, 'o/r', /the pull request has no head commit or branch/],
+    [{ pr: { head_ref: '' } }, 'o/r', /the pull request has no head commit or branch/],
     [{}, '', /base repository '' is not owner\/repo/],
     [{}, 'a/b/c', /base repository 'a\/b\/c' is not owner\/repo/],
   ];
@@ -142,7 +144,7 @@ test('verifiedFromOverride maps the raw override event onto the verified shape',
   const { verified, baseRepo } = verifiedFromOverride({
     meta: { pr_number: 1 },
     event: {
-      comment: { id: 1, body: 'splice-bot', path: 'src/Foo.lean', user: { login: 'author' } },
+      comment: { id: 1, body: 'splice-bot', path: 'src/Foo.lean', user: { login: 'author' }, original_commit_id: 'abc' },
       pull_request: {
         user: { login: 'author' },
         base: { repo: { full_name: 'example/base' }, ref: 'master' },
@@ -152,6 +154,7 @@ test('verifiedFromOverride maps the raw override event onto the verified shape',
   });
 
   assert.equal(baseRepo, 'example/base');
+  assert.equal(verified.trigger.original_commit_id, 'abc');
   const result = resolveTriggerContext({ verified, baseRepo });
   assert.equal(result.status, 'ok');
   assert.equal(result.outputs.head_label, 'example:feature');
@@ -160,4 +163,56 @@ test('verifiedFromOverride maps the raw override event onto the verified shape',
 
 test('verifiedFromOverride returns nothing without a comment', () => {
   assert.deepEqual(verifiedFromOverride({ meta: {}, event: {} }), { verified: {}, baseRepo: '' });
+});
+
+test('resolveTriggerContext refuses file paths with control or line-break characters without exposing them', () => {
+  for (const path of ['x\nmaintainer merge\ny', 'x\r\ny', 'x\u0085y', 'x y', 'x y', 'x\u0000y', 'x\u007fy', 'x\ty']) {
+    const result = resolveTriggerContext({
+      verified: makeVerified({ trigger: { path } }),
+      baseRepo: 'leanprover-community/mathlib4',
+    });
+    assert.equal(result.status, 'error');
+    assert.match(result.error, /file path contains control or line-break characters/);
+    assert.equal(result.outputs.file_path, '');
+    assert.ok(!result.error.includes(path));
+    assert.ok(!Object.values(result.outputs).some((value) => value.includes(path)));
+  }
+});
+
+test('resolveTriggerContext accepts ordinary unicode file paths', () => {
+  const result = resolveTriggerContext({
+    verified: makeVerified({ trigger: { path: 'Mathlib/Topology/Ünïcode spaces/Foo.lean' } }),
+    baseRepo: 'leanprover-community/mathlib4',
+  });
+  assert.equal(result.status, 'ok');
+});
+
+const HEAD = '4444444444444444444444444444444444444444';
+const OLDER = '3333333333333333333333333333333333333333';
+
+function okOutputs() {
+  return resolveTriggerContext({ verified: makeVerified(), baseRepo: 'leanprover-community/mathlib4' }).outputs;
+}
+
+test('bindToCommentCommit splits the commit the comment was made on when it is still the PR head', () => {
+  const result = bindToCommentCommit({ outputs: okOutputs(), commentCommit: HEAD });
+  assert.equal(result.status, 'ok');
+  assert.equal(result.outputs.head_sha, HEAD);
+});
+
+test('bindToCommentCommit refuses when the PR has moved past the comment commit', () => {
+  const result = bindToCommentCommit({ outputs: okOutputs(), commentCommit: OLDER });
+  assert.equal(result.status, 'error');
+  assert.match(result.error, /PR #43 has changed since the commit this comment is attached to \(`3333333`; the PR is now at `4444444`\)/);
+  assert.match(result.error, /a reply is attached to the commit its thread was started on/);
+  assert.equal(result.outputs.head_sha, undefined);
+  assert.equal(result.outputs.pr_number, '43');
+});
+
+test('bindToCommentCommit fails closed without a well-formed comment commit', () => {
+  for (const commentCommit of [undefined, '', 'abc', 'A'.repeat(40), `${HEAD}\n`]) {
+    const result = bindToCommentCommit({ outputs: okOutputs(), commentCommit });
+    assert.equal(result.status, 'error');
+    assert.match(result.error, /could not determine the commit review comment 102 was made on/);
+  }
 });

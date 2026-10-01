@@ -353,7 +353,9 @@ GitHub runs `pull_request_review_comment` workflows from the PR's merge commit, 
 `splice-wf-run` therefore treats the artifact only as a hint:
 
 - It consumes the artifact with [privilege-escalation-bridge](https://github.com/leanprover-community/privilege-escalation-bridge) v2 and `verify: true`. The bridge re-fetches the review comment (by the comment id in the artifact) and the PR it belongs to from the API. It checks that the comment's author is the user whose event started the trigger run, and that the comment was written before that run and last changed at most 24 hours before it.
-- The commenter, the PR author, the PR number, the file path, the comment body, and the PR's head repository, branch and commit all come from those verified values.
+- The commenter, the PR author, the PR number, the file path, the comment body, and the PR's head repository and branch all come from those verified values.
+- The split is taken from the commit the comment was made on, and only while that commit is still the PR's head. A push after the comment therefore cannot change what gets split.
+- File paths containing control or line-break characters are refused.
 - The base repository is the repository the `workflow_run` workflow runs in.
 - `base_ref`, `committer` and `author` are `splice-wf-run` inputs. The trigger workflow still accepts its old inputs with these names, but they are ignored.
 
@@ -434,7 +436,8 @@ Test-only internal inputs such as `bridge_override_json` are intentionally undoc
 
 - The privileged stage parses the keyword/args/extra text from the comment body as the bridge re-fetched it, so the command grammar always runs at the `splice-wf-run` pin's version — even on PRs whose merge commit still carries an older trigger-workflow pin. Two consequences: edits made to the comment between the event and the privileged run take effect (only the commenter or a repo maintainer can edit it), and a comment edited to no longer contain a `splice-bot` line becomes a silent no-op.
 - A run triggered by someone other than the comment's author editing it fails verification, because that run is credited to the editor. It stops without a comment back; post a fresh comment instead.
-- The split is taken from the PR's head commit when the privileged stage runs, which can be newer than the commit the comment was made on.
+- splice-bot splits only the commit a comment was made on, and only while it is still the PR's head. If the PR was pushed to after that commit (including while the comment sat in a pending review, or because the reviewer's page was behind), the run is refused with a comment back; post a new review comment on the latest changes.
+- A reply belongs to the commit its thread was started on, so replying `splice-bot` in a thread started before the latest push is refused the same way. Post it as a new review comment instead.
 - If the PR's head repository has been deleted, the split fails and the comment back says so.
 - If selected changes touch `.github/workflows/*`, the token performing the push must have workflow-write capability (`Workflows: Read & write` for app/fine-grained tokens).
 - This can also be required even when the selected file is not under `.github/workflows/*` if upstream commits included in the push modify workflow files.
@@ -455,6 +458,8 @@ References:
 | `Unknown splice-bot command` | Trigger keyword did not match any configured `label_commands` entry | Remove the keyword to run the default split flow, or add the missing command to `label_commands` |
 | `Invalid splice-bot command arguments` | Trigger-line text after the keyword did not match the command's `allowed_args` (or the command accepts no arguments) | Re-run with one of the allowed argument values, or add the argument to the command's `allowed_args` |
 | No comment back; "Consume bridge artifact" failed with `verify: ...` | The bridge could not verify the trigger comment: it was deleted before the privileged stage ran, edited by someone other than its author, or `token` cannot read pull requests on the base repo | Post a fresh trigger comment, or grant the token `Pull requests` read access |
+| `Cannot split this file` ... `has changed since the commit this comment is attached to` | The PR was pushed to after the commit the comment (or, for a reply, its thread) was made on | Post `splice-bot` as a new review comment on the latest changes |
+| `Cannot split this file` ... `file path contains control or line-break characters` | The file's name contains characters splice-bot refuses to put in comments | Rename the file, or split it manually |
 | `Invalid label command configuration` | `label_commands` could not be parsed or validated | Fix the JSON shape so it is an array of objects with `command`/`keyword` plus `label` and/or `comment` (with only supported `comment` placeholders) |
 | `Not authorized to run label command` | Commenter passed the top-level auth rules but did not match the command-specific `allowed_users`, `allowed_teams`, or `min_repo_permission` rules | Adjust the command config or use an account/team with the required access |
 | `Failed to apply label` | Split PR was created, but the workflow token could not add the configured label | Grant `issues: write` / equivalent token scope and verify the label name; the split PR already exists and can be labeled manually |

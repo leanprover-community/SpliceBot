@@ -13,3 +13,5 @@ invalid-command-args-fails-early :: Argument 'rebase' is not allowed for command
 stale-bridge-without-args-resolves-from-body :: Authorized label command 'maintainer'
 edited-comment-without-trigger-noops :: nothing to do
 splice-path-reaches-late-workflow-steps :: Check out BASE
+comment-on-older-commit-refuses-split :: has changed since the commit this comment is attached to
+unsafe-file-path-refuses-split :: file path contains control or line-break characters

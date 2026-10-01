@@ -95,9 +95,11 @@ runs:
 
     # Derives every value later steps act on from the verified comment and PR
     # (the base repo is this repository), and parses the trigger grammar from
-    # the verified comment body. trigger_found == 'false' (trigger line gone,
-    # e.g. the comment was edited after the event) is a clean no-op: every
-    # later step skips, including the comment-back step.
+    # the verified comment body. The split commit is the one the comment was
+    # made on, which must still be the PR's head (see lib/trigger-context.js).
+    # trigger_found == 'false' (trigger line gone, e.g. the comment was edited
+    # after the event) is a clean no-op: every later step skips, including the
+    # comment-back step.
     - name: Read trigger comment and PR
       id: trigger_context
       uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
@@ -110,9 +112,10 @@ runs:
         BRIDGE_META_JSON: ${{ inputs.bridge_override_json != '' && steps.bridge.outputs.meta-json || '' }}
         BRIDGE_EVENT_JSON: ${{ inputs.bridge_override_json != '' && steps.bridge.outputs.event-json || '' }}
       with:
+        github-token: ${{ inputs.token || github.token }}
         script: |
           const { runTriggerContextStep } = require(process.env.ACTION_LIB_PATH);
-          await runTriggerContextStep({ core, env: process.env });
+          await runTriggerContextStep({ core, github, env: process.env });
 
     - name: Authorize commenter
       if: steps.trigger_context.outputs.file_path != '' && steps.trigger_context.outputs.trigger_found == 'true'
@@ -337,6 +340,7 @@ runs:
         ORIGINAL_PR_NUMBER: ${{ steps.trigger_context.outputs.pr_number }}
         REVIEW_COMMENT_ID: ${{ steps.trigger_context.outputs.review_comment_id }}
         REPO_FULL: ${{ steps.trigger_context.outputs.base_repo }}
+        CONTEXT_ERROR: ${{ steps.trigger_context.outputs.context_error }}
         TRIGGER_MODE: ${{ steps.resolve_trigger_command.outputs.trigger_mode }}
         TRIGGER_KEYWORD: ${{ steps.trigger_context.outputs.trigger_keyword }}
         TRIGGER_ARGS: ${{ steps.trigger_context.outputs.trigger_args }}
