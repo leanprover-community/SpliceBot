@@ -25,7 +25,7 @@ jobs:
           private-key: ${{ secrets.SPLICEBOT_TESTING_PRIVATE_KEY }}
           owner: leanprover-community
 
-      - uses: leanprover-community/SpliceBot/.github/actions/splice-wf-run@b85378f2f5e5c31ad5cb4c3fd4710859f8aac63e # master
+      - uses: leanprover-community/SpliceBot/.github/actions/splice-wf-run@a9abdebc08f03d9fc94e5124425d4e79027415a2 # master
         with:
           source_workflow: ${{ github.event.workflow_run.name }}
           # Optional: push PR branches to a dedicated fork.
