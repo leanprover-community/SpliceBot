@@ -66,7 +66,7 @@ You can run the lightweight workflow smoke tests locally with [`act`](https://gi
 These tests exercise the reusable trigger workflow against canned review-comment payloads and intentionally skip bridge-artifact emission via the workflow's test-only `emit_bridge_artifact` input.
 The composite-action smoke harness uses the internal test-only `bridge_override_json` input.
 Both inputs exist only for local/CI testing and are not part of the supported public API.
-With `bridge_override_json` there is no trigger run to verify against, so the action turns off the bridge's `verify` and `lib/trigger-context.js` maps the override's raw `meta`/`event` values onto the verified shape (`verifiedFromOverride`), including the base repository from `event.pull_request.base.repo.full_name` and the commit the comment was made on from `event.comment.original_commit_id` (real runs re-fetch that from the API).
+With `bridge_override_json` there is no trigger run to verify against, so the action turns off the bridge's `verify` and `lib/trigger-context.js` maps the override's raw `meta`/`event` values onto the verified shape (`verifiedFromOverride`), including the base repository from `event.pull_request.base.repo.full_name` and the commit the comment was made on from `event.comment.original_commit_id` (real runs take it from the bridge's `verified.trigger.original_commit_id`).
 
 Prerequisites:
 

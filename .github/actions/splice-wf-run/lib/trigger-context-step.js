@@ -8,25 +8,7 @@ function parseJson(raw, what) {
   }
 }
 
-// The bridge's verified trigger does not include the commit a review comment
-// was made on, so re-fetch the (verified) comment for it. The checks are
-// belt-and-braces: the id is verified, so this is the same comment.
-async function fetchCommentCommit({ github, outputs, author }) {
-  const [owner, repo] = outputs.base_repo.split('/');
-  const commentId = Number(outputs.review_comment_id);
-  let data;
-  try {
-    ({ data } = await github.rest.pulls.getReviewComment({ owner, repo, comment_id: commentId }));
-  } catch (error) {
-    throw new Error(`Could not fetch review comment ${commentId} to find the commit it was made on: ${error.message}`);
-  }
-  if (data.user?.login !== author || !String(data.pull_request_url || '').endsWith(`/pulls/${outputs.pr_number}`)) {
-    throw new Error(`Review comment ${commentId} no longer matches the verified comment.`);
-  }
-  return data.original_commit_id;
-}
-
-async function runTriggerContextStep({ core, github, env = process.env }) {
+async function runTriggerContextStep({ core, env = process.env }) {
   let verified;
   let baseRepo = (env.BASE_REPO || '').trim();
 
@@ -64,18 +46,10 @@ async function runTriggerContextStep({ core, github, env = process.env }) {
   }
 
   if (result.status === 'ok') {
-    const { parsed } = result;
-    let commentCommit;
-    try {
-      commentCommit = (env.BRIDGE_OVERRIDE_MODE || '') === 'true'
-        ? verified.trigger.original_commit_id
-        : await fetchCommentCommit({ github, outputs: result.outputs, author: result.outputs.commenter_login });
-    } catch (error) {
-      result = { status: 'error', error: error.message, outputs: result.outputs };
-    }
-    if (result.status === 'ok') {
-      result = { ...bindToCommentCommit({ outputs: result.outputs, commentCommit }), parsed };
-    }
+    result = {
+      ...bindToCommentCommit({ outputs: result.outputs, commentCommit: verified.trigger.original_commit_id }),
+      parsed: result.parsed,
+    };
   }
 
   for (const [key, value] of Object.entries(result.outputs)) {

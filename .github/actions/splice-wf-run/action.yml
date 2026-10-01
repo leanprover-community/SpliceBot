@@ -83,7 +83,7 @@ runs:
     # consume then rejects the untrusted producer.
     - name: Consume bridge artifact
       id: bridge
-      uses: leanprover-community/privilege-escalation-bridge/consume@ccffab79ccf2cb6b105b858fa3e4735727cf4519 # v2.0.0
+      uses: leanprover-community/privilege-escalation-bridge/consume@120e98bbb1e9438be8973be645ef67e9cddc39ba # v2.1.0
       with:
         token: ${{ inputs.token || github.token }}
         artifact: workflow-data
@@ -112,10 +112,9 @@ runs:
         BRIDGE_META_JSON: ${{ inputs.bridge_override_json != '' && steps.bridge.outputs.meta-json || '' }}
         BRIDGE_EVENT_JSON: ${{ inputs.bridge_override_json != '' && steps.bridge.outputs.event-json || '' }}
       with:
-        github-token: ${{ inputs.token || github.token }}
         script: |
           const { runTriggerContextStep } = require(process.env.ACTION_LIB_PATH);
-          await runTriggerContextStep({ core, github, env: process.env });
+          await runTriggerContextStep({ core, env: process.env });
 
     - name: Authorize commenter
       if: steps.trigger_context.outputs.file_path != '' && steps.trigger_context.outputs.trigger_found == 'true'

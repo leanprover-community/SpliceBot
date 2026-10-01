@@ -352,7 +352,7 @@ Notes:
 GitHub runs `pull_request_review_comment` workflows from the PR's merge commit, so for a fork PR the PR author controls the trigger workflow and everything in the bridge artifact.
 `splice-wf-run` therefore treats the artifact only as a hint:
 
-- It consumes the artifact with [privilege-escalation-bridge](https://github.com/leanprover-community/privilege-escalation-bridge) v2 and `verify: true`. The bridge re-fetches the review comment (by the comment id in the artifact) and the PR it belongs to from the API. It checks that the comment's author is the user whose event started the trigger run, and that the comment was written before that run and last changed at most 24 hours before it.
+- It consumes the artifact with [privilege-escalation-bridge](https://github.com/leanprover-community/privilege-escalation-bridge) v2.1 and `verify: true`. The bridge re-fetches the review comment (by the comment id in the artifact) and the PR it belongs to from the API, including the commit the comment was made on. It checks that the comment's author is the user whose event started the trigger run, and that the comment was written before that run and last changed at most 24 hours before it.
 - The commenter, the PR author, the PR number, the file path, the comment body, and the PR's head repository and branch all come from those verified values.
 - The split is taken from the commit the comment was made on, and only while that commit is still the PR's head. A push after the comment therefore cannot change what gets split.
 - File paths containing control or line-break characters are refused.

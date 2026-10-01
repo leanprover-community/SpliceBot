@@ -169,7 +169,7 @@ jobs:
 
       - if: ${{ steps.extract.outputs.skip != 'true' && inputs.emit_bridge_artifact }}
         name: Emit bridge artifact
-        uses: leanprover-community/privilege-escalation-bridge/emit@ccffab79ccf2cb6b105b858fa3e4735727cf4519 # v2.0.0
+        uses: leanprover-community/privilege-escalation-bridge/emit@120e98bbb1e9438be8973be645ef67e9cddc39ba # v2.1.0
         with:
           artifact: workflow-data
           outputs_file: bridge-outputs.json

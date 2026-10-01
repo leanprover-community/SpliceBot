@@ -89,9 +89,11 @@ function resolveTriggerContext({ verified, baseRepo, baseRefInput = '' }) {
   return { status: 'ok', outputs, parsed };
 }
 
-// Picks the commit to split: the one the review comment was made on, which a
-// PR author cannot change after the fact. Splitting the PR's head instead
-// would let them push different content between the comment and this run.
+// Picks the commit to split: the one the review comment was made on
+// (verified.trigger.original_commit_id), which a PR author cannot change after
+// the fact. Splitting the PR's head instead would let them push different
+// content between the comment and this run; verified.trigger.commit_id is no
+// better, since GitHub moves it forward as the PR is pushed to.
 // A reply's original_commit_id is the commit its thread was started on, which
 // may predate changes the replier saw, so the comment's commit must also still
 // be the PR's head: the comment (or its thread) was then made on exactly the
