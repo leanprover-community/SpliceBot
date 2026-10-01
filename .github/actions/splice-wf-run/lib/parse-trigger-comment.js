@@ -5,9 +5,9 @@
 // This module is the source of truth for everything after the prefix. The
 // unprivileged trigger workflow (splice.yaml) applies the same prefix match,
 // but only to decide whether to emit a bridge artifact; the privileged stage
-// re-fetches the comment body and parses it here, so grammar changes take
-// effect for all open PRs without waiting for their merge commits to pick up
-// a newer trigger workflow.
+// parses the comment body that the bridge re-fetched and verified here, so
+// grammar changes take effect for all open PRs without waiting for their merge
+// commits to pick up a newer trigger workflow.
 function parseTriggerComment(body) {
   const bodyLines = String(body ?? '').split(/\r?\n/);
   const triggerLineIndex = bodyLines.findIndex((line) => /^splice-bot\b/i.test(line));

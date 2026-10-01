@@ -37,6 +37,18 @@ inputs:
     description: Optional override for maintainer edits on fork PRs ("true" or "false")
     required: false
     default: ''
+  base_ref:
+    description: Base branch for the split PR; defaults to the original PR's base branch
+    required: false
+    default: ''
+  committer:
+    description: Committer of the split PR's commit, as "Display Name <email@address.com>"
+    required: false
+    default: 'github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>'
+  author:
+    description: Author of the split PR's commit, as "Display Name <email@address.com>"; defaults to the original PR's author
+    required: false
+    default: ''
   pr_title:
     description: Title template for the split PR; supports {file_path}, {file_name}, {file_scope}, and {pr_number} placeholders
     required: false
@@ -46,7 +58,7 @@ inputs:
     required: false
     default: ''
   token:
-    description: Optional token used for artifact download, checkout, and PR API calls; falls back to github.token
+    description: Optional token used for artifact download, verification, checkout, and PR API calls; falls back to github.token
     required: false
     default: ''
   authz_token:
@@ -61,58 +73,49 @@ inputs:
 runs:
   using: composite
   steps:
-    # The bridge's trigger_keyword/trigger_args/trigger_extra_text outputs are
-    # deliberately ignored: trigger workflows run from the PR's merge commit, so
-    # stale PRs can emit artifacts produced by an old grammar. The fetch step
-    # below re-reads the comment body and parses it with current code instead.
-    # The bridge still authenticates the event and supplies the comment id,
-    # commenter identity, and PR metadata.
+    # The trigger workflow runs from the PR's merge commit, so for a fork PR
+    # every value in the artifact may be forged. verify makes consume re-fetch
+    # the review comment (by the artifact's comment id) and its PR from the
+    # API, and check that the comment's author is the user whose event started
+    # the trigger run. Only those verified values are exposed; raw artifact
+    # values are withheld. The test-only bridge_override_json mode has no
+    # trigger run to verify against, so it skips verify; in a real workflow_run
+    # consume then rejects the untrusted producer.
     - name: Consume bridge artifact
       id: bridge
-      uses: leanprover-community/privilege-escalation-bridge/consume@ea7d63d1c8ece92a8e89b6a6d8fda40603167a91 # v1
+      uses: leanprover-community/privilege-escalation-bridge/consume@ccffab79ccf2cb6b105b858fa3e4735727cf4519 # v2.0.0
       with:
         token: ${{ inputs.token || github.token }}
         artifact: workflow-data
         source_workflow: ${{ inputs.source_workflow }}
         override_json: ${{ inputs.bridge_override_json }}
         require_event: pull_request_review_comment
+        verify: ${{ inputs.bridge_override_json == '' }}
         fail_on_missing: false
-        extract: |
-          pr_number=meta.pr_number
-          review_comment_id=event.comment.id
-          file_path=event.comment.path
-          commenter_login=event.comment.user.login
-          pr_author_login=event.pull_request.user.login
-          base_ref=outputs.base_ref
-          base_repo=event.pull_request.base.repo.full_name
-          head_repo=event.pull_request.head.repo.full_name
-          head_sha=event.pull_request.head.sha
-          head_ref=event.pull_request.head.ref
-          head_label=event.pull_request.head.label
-          committer=outputs.committer
-          author=outputs.author
 
-    # trigger_found == 'false' (trigger line gone, e.g. the comment was edited
-    # after the event) is a clean no-op: every later step skips, including the
-    # comment-back step.
-    - name: Fetch and parse trigger comment
-      if: steps.bridge.outputs.file_path != ''
-      id: trigger_comment
+    # Derives every value later steps act on from the verified comment and PR
+    # (the base repo is this repository), and parses the trigger grammar from
+    # the verified comment body. trigger_found == 'false' (trigger line gone,
+    # e.g. the comment was edited after the event) is a clean no-op: every
+    # later step skips, including the comment-back step.
+    - name: Read trigger comment and PR
+      id: trigger_context
       uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
       env:
-        ACTION_LIB_PATH: ${{ github.action_path }}/lib/fetch-trigger-comment-step.js
-        BASE_REPO: ${{ steps.bridge.outputs.base_repo }}
-        REVIEW_COMMENT_ID: ${{ steps.bridge.outputs.review_comment_id }}
+        ACTION_LIB_PATH: ${{ github.action_path }}/lib/trigger-context-step.js
+        VERIFIED_JSON: ${{ steps.bridge.outputs.verified-json }}
+        BASE_REPO: ${{ github.repository }}
+        BASE_REF_INPUT: ${{ inputs.base_ref }}
         BRIDGE_OVERRIDE_MODE: ${{ inputs.bridge_override_json != '' }}
-        BRIDGE_EVENT_JSON: ${{ steps.bridge.outputs.event-json }}
+        BRIDGE_META_JSON: ${{ inputs.bridge_override_json != '' && steps.bridge.outputs.meta-json || '' }}
+        BRIDGE_EVENT_JSON: ${{ inputs.bridge_override_json != '' && steps.bridge.outputs.event-json || '' }}
       with:
-        github-token: ${{ inputs.token || github.token }}
         script: |
-          const { runFetchTriggerCommentStep } = require(process.env.ACTION_LIB_PATH);
-          await runFetchTriggerCommentStep({ core, github, env: process.env });
+          const { runTriggerContextStep } = require(process.env.ACTION_LIB_PATH);
+          await runTriggerContextStep({ core, env: process.env });
 
     - name: Authorize commenter
-      if: steps.bridge.outputs.file_path != '' && steps.trigger_comment.outputs.trigger_found == 'true'
+      if: steps.trigger_context.outputs.file_path != '' && steps.trigger_context.outputs.trigger_found == 'true'
       id: authorize_commenter
       uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
       env:
@@ -121,9 +124,9 @@ runs:
         MIN_REPO_PERMISSION: ${{ inputs.min_repo_permission }}
         RAW_ALLOWED_TEAMS: ${{ inputs.allowed_teams }}
         RAW_ALLOWED_USERS: ${{ inputs.allowed_users }}
-        COMMENTER_LOGIN: ${{ steps.bridge.outputs.commenter_login }}
-        PR_AUTHOR_LOGIN: ${{ steps.bridge.outputs.pr_author_login }}
-        BASE_REPO: ${{ steps.bridge.outputs.base_repo }}
+        COMMENTER_LOGIN: ${{ steps.trigger_context.outputs.commenter_login }}
+        PR_AUTHOR_LOGIN: ${{ steps.trigger_context.outputs.pr_author_login }}
+        BASE_REPO: ${{ steps.trigger_context.outputs.base_repo }}
         INPUT_TOKEN: ${{ inputs.token }}
         AUTHZ_TOKEN: ${{ inputs.authz_token }}
       with:
@@ -133,16 +136,16 @@ runs:
           await run({ core, github, env: process.env });
 
     - name: Resolve configured trigger command
-      if: steps.bridge.outputs.file_path != '' && steps.authorize_commenter.outcome == 'success'
+      if: steps.trigger_context.outputs.file_path != '' && steps.authorize_commenter.outcome == 'success'
       id: resolve_trigger_command
       uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
       env:
         ACTION_LIB_PATH: ${{ github.action_path }}/lib/resolve-trigger-command-step.js
         RAW_LABEL_COMMANDS: ${{ inputs.label_commands }}
-        TRIGGER_KEYWORD: ${{ steps.trigger_comment.outputs.trigger_keyword }}
-        TRIGGER_ARGS: ${{ steps.trigger_comment.outputs.trigger_args }}
-        COMMENTER_LOGIN: ${{ steps.bridge.outputs.commenter_login }}
-        BASE_REPO: ${{ steps.bridge.outputs.base_repo }}
+        TRIGGER_KEYWORD: ${{ steps.trigger_context.outputs.trigger_keyword }}
+        TRIGGER_ARGS: ${{ steps.trigger_context.outputs.trigger_args }}
+        COMMENTER_LOGIN: ${{ steps.trigger_context.outputs.commenter_login }}
+        BASE_REPO: ${{ steps.trigger_context.outputs.base_repo }}
         INPUT_TOKEN: ${{ inputs.token }}
         AUTHZ_TOKEN: ${{ inputs.authz_token }}
       with:
@@ -152,36 +155,36 @@ runs:
           await runResolveAndAuthorizeCommandStep({ core, github, env: process.env });
 
     - name: Check out BASE (PR base repo @ base_ref)
-      if: steps.bridge.outputs.file_path != '' && steps.authorize_commenter.outcome == 'success' && steps.resolve_trigger_command.outcome == 'success'
+      if: steps.trigger_context.outputs.file_path != '' && steps.authorize_commenter.outcome == 'success' && steps.resolve_trigger_command.outcome == 'success'
       id: checkout_base
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       with:
         token: ${{ inputs.token || github.token }}
-        repository: ${{ steps.bridge.outputs.base_repo }}
-        ref: ${{ steps.bridge.outputs.base_ref }}
+        repository: ${{ steps.trigger_context.outputs.base_repo }}
+        ref: ${{ steps.trigger_context.outputs.base_ref }}
         fetch-depth: 0
         path: base
 
     - name: Check out HEAD (PR head repo)
-      if: steps.bridge.outputs.file_path != '' && steps.authorize_commenter.outcome == 'success' && steps.resolve_trigger_command.outcome == 'success'
+      if: steps.trigger_context.outputs.file_path != '' && steps.authorize_commenter.outcome == 'success' && steps.resolve_trigger_command.outcome == 'success'
       id: checkout_head
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       with:
         token: ${{ inputs.token || github.token }}
-        repository: ${{ steps.bridge.outputs.head_repo }}
-        ref: ${{ steps.bridge.outputs.head_sha }}
+        repository: ${{ steps.trigger_context.outputs.head_repo }}
+        ref: ${{ steps.trigger_context.outputs.head_sha }}
         fetch-depth: 0
         path: head
 
     - name: Stage file changes via 3-way patch apply
-      if: steps.bridge.outputs.file_path != '' && steps.authorize_commenter.outcome == 'success' && steps.resolve_trigger_command.outcome == 'success'
+      if: steps.trigger_context.outputs.file_path != '' && steps.authorize_commenter.outcome == 'success' && steps.resolve_trigger_command.outcome == 'success'
       id: branch_and_copy
       shell: bash
       env:
-        FILE_PATH: ${{ steps.bridge.outputs.file_path }}
-        PR_NUMBER: ${{ steps.bridge.outputs.pr_number }}
-        BASE_REF: ${{ steps.bridge.outputs.base_ref }}
-        HEAD_SHA: ${{ steps.bridge.outputs.head_sha }}
+        FILE_PATH: ${{ steps.trigger_context.outputs.file_path }}
+        PR_NUMBER: ${{ steps.trigger_context.outputs.pr_number }}
+        BASE_REF: ${{ steps.trigger_context.outputs.base_ref }}
+        HEAD_SHA: ${{ steps.trigger_context.outputs.head_sha }}
       run: |
         set -euo pipefail
 
@@ -238,19 +241,20 @@ runs:
         fi
 
     - name: Validate create-pull-request inputs
-      if: steps.bridge.outputs.file_path != '' && steps.authorize_commenter.outcome == 'success' && steps.resolve_trigger_command.outcome == 'success' && steps.branch_and_copy.outputs.NO_CHANGES != 'true' && steps.branch_and_copy.outputs.APPLY_FAILED != 'true'
+      if: steps.trigger_context.outputs.file_path != '' && steps.authorize_commenter.outcome == 'success' && steps.resolve_trigger_command.outcome == 'success' && steps.branch_and_copy.outputs.NO_CHANGES != 'true' && steps.branch_and_copy.outputs.APPLY_FAILED != 'true'
       id: validate_cpr_inputs
       uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
       env:
         PUSH_TO_FORK: ${{ inputs.push_to_fork }}
         MAINTAINER_CAN_MODIFY: ${{ inputs.maintainer_can_modify }}
         BRANCH_NAME: ${{ steps.branch_and_copy.outputs.BRANCH }}
-        COMMITTER: ${{ steps.bridge.outputs.committer }}
-        AUTHOR: ${{ steps.bridge.outputs.author }}
+        COMMITTER: ${{ inputs.committer }}
+        AUTHOR: ${{ inputs.author }}
+        PR_AUTHOR_LOGIN: ${{ steps.trigger_context.outputs.pr_author_login }}
         PR_TITLE_TEMPLATE: ${{ inputs.pr_title }}
         SCOPE_STRIP_PREFIX: ${{ inputs.scope_strip_prefix }}
-        FILE_PATH: ${{ steps.bridge.outputs.file_path }}
-        PR_NUMBER: ${{ steps.bridge.outputs.pr_number }}
+        FILE_PATH: ${{ steps.trigger_context.outputs.file_path }}
+        PR_NUMBER: ${{ steps.trigger_context.outputs.pr_number }}
         ACTION_LIB_PATH: ${{ github.action_path }}/lib/validate-cpr-inputs-step.js
       with:
         github-token: ${{ inputs.token || github.token }}
@@ -259,27 +263,27 @@ runs:
           await runValidateCprInputsStep({ core, github, env: process.env });
 
     - name: Create Pull Request
-      if: steps.bridge.outputs.file_path != '' && steps.authorize_commenter.outcome == 'success' && steps.resolve_trigger_command.outcome == 'success' && steps.branch_and_copy.outputs.NO_CHANGES != 'true' && steps.branch_and_copy.outputs.APPLY_FAILED != 'true' && steps.validate_cpr_inputs.outcome == 'success'
+      if: steps.trigger_context.outputs.file_path != '' && steps.authorize_commenter.outcome == 'success' && steps.resolve_trigger_command.outcome == 'success' && steps.branch_and_copy.outputs.NO_CHANGES != 'true' && steps.branch_and_copy.outputs.APPLY_FAILED != 'true' && steps.validate_cpr_inputs.outcome == 'success'
       id: cpr
       uses: peter-evans/create-pull-request@98357b18bf14b5342f975ff684046ec3b2a07725 #v8.0.0
       with:
-        committer: ${{ steps.bridge.outputs.committer }}
-        author: ${{ steps.bridge.outputs.author }}
+        committer: ${{ inputs.committer }}
+        author: ${{ steps.validate_cpr_inputs.outputs.author }}
         path: base
-        base: ${{ steps.bridge.outputs.base_ref }}
+        base: ${{ steps.trigger_context.outputs.base_ref }}
         token: ${{ inputs.token || github.token }}
         # Fork-only options: when push_to_fork is empty, these resolve to empty strings and CPR uses base-repo branch mode.
         branch-token: ${{ inputs.push_to_fork != '' && (inputs.branch_token || inputs.token || github.token) || '' }}
         push-to-fork: ${{ inputs.push_to_fork != '' && inputs.push_to_fork || '' }}
         # CPR expects a strict boolean; treat any non-"true" value as false.
         maintainer-can-modify: ${{ inputs.maintainer_can_modify == 'true' }}
-        commit-message: "Automated addition of changes in ${{ steps.bridge.outputs.file_path }}"
+        commit-message: "Automated addition of changes in ${{ steps.trigger_context.outputs.file_path }}"
         title: ${{ steps.validate_cpr_inputs.outputs.pr_title }}
         body: >-
-          This PR was automatically created from PR #${{ steps.bridge.outputs.pr_number }}
-          by @${{ steps.bridge.outputs.pr_author_login }} via a
-          [review comment](${{ github.server_url }}/${{ steps.bridge.outputs.base_repo }}/pull/${{ steps.bridge.outputs.pr_number }}#discussion_r${{ steps.bridge.outputs.review_comment_id }})
-          by @${{ steps.bridge.outputs.commenter_login }}.
+          This PR was automatically created from PR #${{ steps.trigger_context.outputs.pr_number }}
+          by @${{ steps.trigger_context.outputs.pr_author_login }} via a
+          [review comment](${{ github.server_url }}/${{ steps.trigger_context.outputs.base_repo }}/pull/${{ steps.trigger_context.outputs.pr_number }}#discussion_r${{ steps.trigger_context.outputs.review_comment_id }})
+          by @${{ steps.trigger_context.outputs.commenter_login }}.
         branch: ${{ steps.branch_and_copy.outputs.BRANCH }}
         branch-suffix: random
         delete-branch: true
@@ -290,7 +294,7 @@ runs:
       uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
       env:
         ACTION_LIB_PATH: ${{ github.action_path }}/lib/apply-label-step.js
-        REPO_FULL: ${{ steps.bridge.outputs.base_repo }}
+        REPO_FULL: ${{ steps.trigger_context.outputs.base_repo }}
         LABEL_NAME: ${{ steps.resolve_trigger_command.outputs.label_name }}
         SPLIT_PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
       with:
@@ -307,14 +311,14 @@ runs:
       uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
       env:
         ACTION_LIB_PATH: ${{ github.action_path }}/lib/post-split-pr-comment-step.js
-        REPO_FULL: ${{ steps.bridge.outputs.base_repo }}
+        REPO_FULL: ${{ steps.trigger_context.outputs.base_repo }}
         COMMENT_TEMPLATE: ${{ steps.resolve_trigger_command.outputs.comment_template }}
         SPLIT_PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
-        FILE_PATH: ${{ steps.bridge.outputs.file_path }}
-        PR_NUMBER: ${{ steps.bridge.outputs.pr_number }}
-        COMMENTER_LOGIN: ${{ steps.bridge.outputs.commenter_login }}
+        FILE_PATH: ${{ steps.trigger_context.outputs.file_path }}
+        PR_NUMBER: ${{ steps.trigger_context.outputs.pr_number }}
+        COMMENTER_LOGIN: ${{ steps.trigger_context.outputs.commenter_login }}
         COMMAND_ARGS: ${{ steps.resolve_trigger_command.outputs.command_args }}
-        EXTRA_COMMENT: ${{ steps.trigger_comment.outputs.trigger_extra_text }}
+        EXTRA_COMMENT: ${{ steps.trigger_context.outputs.trigger_extra_text }}
         SCOPE_STRIP_PREFIX: ${{ inputs.scope_strip_prefix }}
       with:
         github-token: ${{ inputs.token || github.token }}
@@ -323,19 +327,19 @@ runs:
           await run({ core, github, env: process.env });
 
     - name: Comment back on the original PR
-      # Skips only when the fetched comment no longer contains a trigger line
-      # (nothing was requested, so nothing to report); a failed fetch leaves
-      # trigger_found empty and still gets a comment.
-      if: always() && steps.bridge.outputs.pr_number != '' && steps.trigger_comment.outputs.trigger_found != 'false'
+      # Skips when there is no verified PR to report on (no artifact, or consume
+      # failed verification), and when the comment no longer contains a trigger
+      # line (nothing was requested, so nothing to report).
+      if: always() && steps.trigger_context.outputs.pr_number != '' && steps.trigger_context.outputs.trigger_found != 'false'
       uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
       env:
         ACTION_LIB_PATH: ${{ github.action_path }}/lib/comment-back-step.js
-        ORIGINAL_PR_NUMBER: ${{ steps.bridge.outputs.pr_number }}
-        REVIEW_COMMENT_ID: ${{ steps.bridge.outputs.review_comment_id }}
-        REPO_FULL: ${{ steps.bridge.outputs.base_repo }}
+        ORIGINAL_PR_NUMBER: ${{ steps.trigger_context.outputs.pr_number }}
+        REVIEW_COMMENT_ID: ${{ steps.trigger_context.outputs.review_comment_id }}
+        REPO_FULL: ${{ steps.trigger_context.outputs.base_repo }}
         TRIGGER_MODE: ${{ steps.resolve_trigger_command.outputs.trigger_mode }}
-        TRIGGER_KEYWORD: ${{ steps.trigger_comment.outputs.trigger_keyword }}
-        TRIGGER_ARGS: ${{ steps.trigger_comment.outputs.trigger_args }}
+        TRIGGER_KEYWORD: ${{ steps.trigger_context.outputs.trigger_keyword }}
+        TRIGGER_ARGS: ${{ steps.trigger_context.outputs.trigger_args }}
         TRIGGER_RESOLVE_ERROR: ${{ steps.resolve_trigger_command.outputs.resolve_error }}
         LABEL_COMMAND: ${{ steps.resolve_trigger_command.outputs.label_command }}
         LABEL_NAME: ${{ steps.resolve_trigger_command.outputs.label_name }}
@@ -344,13 +348,13 @@ runs:
         COMMAND_COMMENT_TEMPLATE: ${{ steps.resolve_trigger_command.outputs.comment_template }}
         COMMENT_POST_FAILED: ${{ steps.post_split_pr_comment.outputs.comment_post_failed }}
         COMMENT_POST_ERROR: ${{ steps.post_split_pr_comment.outputs.comment_post_error }}
-        FILE_PATH: ${{ steps.bridge.outputs.file_path }}
+        FILE_PATH: ${{ steps.trigger_context.outputs.file_path }}
         APPLY_FAILED: ${{ steps.branch_and_copy.outputs.APPLY_FAILED }}
         NO_CHANGES: ${{ steps.branch_and_copy.outputs.NO_CHANGES }}
         AUTOMATED_PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
-        BASE_REF: ${{ steps.bridge.outputs.base_ref }}
-        HEAD_REF: ${{ steps.bridge.outputs.head_ref }}
-        HEAD_LABEL: ${{ steps.bridge.outputs.head_label }}
+        BASE_REF: ${{ steps.trigger_context.outputs.base_ref }}
+        HEAD_REF: ${{ steps.trigger_context.outputs.head_ref }}
+        HEAD_LABEL: ${{ steps.trigger_context.outputs.head_label }}
         RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}
         AUTHZ_OUTCOME: ${{ steps.authorize_commenter.outcome }}
         AUTHZ_DECISION: ${{ steps.authorize_commenter.outputs.authz_decision }}
@@ -368,7 +372,7 @@ runs:
         PUSH_TO_FORK: ${{ inputs.push_to_fork }}
         BRANCH_TOKEN: ${{ inputs.branch_token }}
         BRIDGE_OUTCOME: ${{ steps.bridge.outcome }}
-        FETCH_TRIGGER_COMMENT_OUTCOME: ${{ steps.trigger_comment.outcome }}
+        TRIGGER_CONTEXT_OUTCOME: ${{ steps.trigger_context.outcome }}
         RESOLVE_TRIGGER_COMMAND_OUTCOME: ${{ steps.resolve_trigger_command.outcome }}
         CHECKOUT_BASE_OUTCOME: ${{ steps.checkout_base.outcome }}
         CHECKOUT_HEAD_OUTCOME: ${{ steps.checkout_head.outcome }}

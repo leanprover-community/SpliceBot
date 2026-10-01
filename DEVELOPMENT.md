@@ -9,7 +9,7 @@ For installing and configuring SpliceBot in your own repository, see the [README
 
 Reusable workflows:
 
-- `.github/workflows/splice.yaml` (unprivileged trigger detector + bridge emitter; the privileged action re-fetches the comment and parses the trigger grammar itself, see `lib/parse-trigger-comment.js`)
+- `.github/workflows/splice.yaml` (unprivileged trigger detector + bridge emitter; the privileged action takes the comment and PR from the bridge's verified values and parses the trigger grammar itself, see `lib/trigger-context.js` and `lib/parse-trigger-comment.js`)
 
 Actions:
 
@@ -36,7 +36,7 @@ Tests:
 The action's logic lives in `.github/actions/splice-wf-run/lib/` and follows a two-layer pattern:
 
 - `*-step.js` modules are thin step entry points: they read env vars set in `action.yml`, call the logic module, and write `core` outputs / failure status.
-- The matching plain modules (for example `authorize-commenter.js`, `command-authorization.js`, `comment-back.js`, `token-sources.js`) hold the logic and are unit-tested under `tests/node/`.
+- The matching plain modules (for example `trigger-context.js`, `authorize-commenter.js`, `command-authorization.js`, `comment-back.js`, `token-sources.js`) hold the logic and are unit-tested under `tests/node/`.
 
 When adding logic, keep it in a plain module with a step wrapper so it stays testable with `node --test`.
 
@@ -66,6 +66,7 @@ You can run the lightweight workflow smoke tests locally with [`act`](https://gi
 These tests exercise the reusable trigger workflow against canned review-comment payloads and intentionally skip bridge-artifact emission via the workflow's test-only `emit_bridge_artifact` input.
 The composite-action smoke harness uses the internal test-only `bridge_override_json` input.
 Both inputs exist only for local/CI testing and are not part of the supported public API.
+With `bridge_override_json` there is no trigger run to verify against, so the action turns off the bridge's `verify` and `lib/trigger-context.js` maps the override's raw `meta`/`event` values onto the verified shape (`verifiedFromOverride`), including the base repository from `event.pull_request.base.repo.full_name`.
 
 Prerequisites:
 

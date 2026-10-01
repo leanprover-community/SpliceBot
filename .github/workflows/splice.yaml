@@ -2,23 +2,26 @@ name: Create single-file PR from review comment (Reusable)
 
 on:
   workflow_call:
+    # base_ref, committer and author are legacy: current splice-wf-run versions
+    # ignore them (this workflow runs from the PR's merge commit, so anything it
+    # emits is PR-controlled) and take the matching splice-wf-run inputs
+    # instead. They are still accepted so existing callers keep working, and
+    # still emitted for older splice-wf-run pins.
     inputs:
       base_ref:
-        description: 'Base branch to compare against (optional)'
+        description: 'Legacy, ignored by current splice-wf-run; set base_ref on splice-wf-run instead'
         required: false
         type: string
         default: master
       committer:
         description: >
-          The committer name and email address in the format `Display Name <email@address.com>`.
-          Defaults to the GitHub Actions bot user.
+          Legacy, ignored by current splice-wf-run; set committer on splice-wf-run instead.
         required: false
         type: string
         default: 'github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>'
       author:
         description: >
-          The author name and email address in the format `Display Name <email@address.com>`.
-          Defaults to the author of the PR.
+          Legacy, ignored by current splice-wf-run; set author on splice-wf-run instead.
         required: false
         type: string
         default: '${{ github.event.pull_request.user.login }} <${{ github.event.pull_request.user.id }}+${{ github.event.pull_request.user.login }}@users.noreply.github.com>'
@@ -81,7 +84,7 @@ jobs:
             // command keyword, the rest of the trigger line is its arguments, and any
             // lines after the trigger line are free-text passed along as extra comment.
             // NOTE: current splice-wf-run pins ignore these parsed values — the
-            // privileged stage re-fetches the comment and parses it with
+            // privileged stage parses the comment body the bridge verified with
             // lib/parse-trigger-comment.js (the grammar's source of truth, kept in
             // sync with this). They are still emitted for older action pins.
             const triggerTokens = bodyLines[triggerLineIndex]
@@ -132,7 +135,7 @@ jobs:
 
             // Outputs preserved for downstream steps
             core.setOutput("skip", "false");
-            // IMPORTANT: base_ref now comes from the reusable workflow input (default master)
+            // Legacy output for older splice-wf-run pins (see the inputs above).
             core.setOutput("base_ref", baseRefFromInput);
             core.setOutput("trigger_keyword", normalizedTriggerKeyword);
             core.setOutput("trigger_args", triggerArgs);
@@ -166,10 +169,13 @@ jobs:
 
       - if: ${{ steps.extract.outputs.skip != 'true' && inputs.emit_bridge_artifact }}
         name: Emit bridge artifact
-        uses: leanprover-community/privilege-escalation-bridge/emit@ea7d63d1c8ece92a8e89b6a6d8fda40603167a91 # v1
+        uses: leanprover-community/privilege-escalation-bridge/emit@ccffab79ccf2cb6b105b858fa3e4735727cf4519 # v2.0.0
         with:
           artifact: workflow-data
           outputs_file: bridge-outputs.json
+          # Current splice-wf-run reads only comment.id (and meta.pr_number),
+          # as hints for the bridge's verify mode; the other fields are kept
+          # for older splice-wf-run pins.
           event_fields: |
             comment.id
             comment.path

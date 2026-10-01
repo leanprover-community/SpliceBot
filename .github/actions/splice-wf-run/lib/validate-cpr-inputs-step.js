@@ -18,6 +18,24 @@ async function resolveForkOwner({ github, pushToFork, onInfo = () => {}, onWarni
   }
 }
 
+// The split PR's commit is attributed to the original PR's author unless the
+// author input overrides it, using the same noreply address GitHub assigns.
+async function resolveAuthor({ github, author, prAuthorLogin }) {
+  if (author) {
+    return author;
+  }
+  if (!prAuthorLogin) {
+    throw new Error('Cannot derive the default commit author because the PR author is unknown. Set the author input.');
+  }
+  let data;
+  try {
+    ({ data } = await github.rest.users.getByUsername({ username: prAuthorLogin }));
+  } catch (error) {
+    throw new Error(`Could not look up PR author ${prAuthorLogin} to derive the default commit author: ${error.message}. Set the author input to skip this lookup.`);
+  }
+  return `${data.login} <${data.id}+${data.login}@users.noreply.github.com>`;
+}
+
 function validateCprInputs({
   pushToFork,
   maintainerCanModify,
@@ -80,7 +98,7 @@ async function runValidateCprInputsStep({ core, github, env = process.env }) {
     maintainerCanModify: env.MAINTAINER_CAN_MODIFY || '',
     branchName: env.BRANCH_NAME || '',
     committer: env.COMMITTER || '',
-    author: env.AUTHOR || '',
+    author: (env.AUTHOR || '').trim(),
     forkOwnerType,
   });
 
@@ -92,9 +110,18 @@ async function runValidateCprInputsStep({ core, github, env = process.env }) {
   });
   core.info(`Rendered split PR title: ${prTitle}`);
 
+  // Last, so the configuration errors above are reported without this lookup.
+  const author = await resolveAuthor({
+    github,
+    author: (env.AUTHOR || '').trim(),
+    prAuthorLogin: (env.PR_AUTHOR_LOGIN || '').trim(),
+  });
+  core.info(`Commit author: ${author}`);
+
   core.setOutput('fork_owner', forkOwner);
   core.setOutput('fork_owner_type', forkOwnerType);
   core.setOutput('pr_title', prTitle);
+  core.setOutput('author', author);
 
   for (const warning of warnings) {
     core.warning(warning);
@@ -107,6 +134,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  resolveAuthor,
   resolveForkOwner,
   runValidateCprInputsStep,
   validateCprInputs,

@@ -98,7 +98,7 @@ test('returns an error for invalid min repo permission', async () => {
   assert.match(result.reason, /Invalid min_repo_permission 'bogus'/);
 });
 
-test('returns an error when bridge fields are missing', async () => {
+test('returns an error when verified fields are missing', async () => {
   const result = await authorizeCommenter({
     allowPrAuthor: false,
     minRepoPermission: 'write',
@@ -112,7 +112,7 @@ test('returns an error when bridge fields are missing', async () => {
   });
 
   assert.equal(result.decision, 'error');
-  assert.match(result.reason, /Missing bridge data required for authorization/);
+  assert.match(result.reason, /Missing verified data required for authorization/);
   assert.match(result.details, /pr_author_login: \(missing\)/);
 });
 

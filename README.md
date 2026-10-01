@@ -9,6 +9,7 @@ It uses a workflow-plus-action pattern:
 2. `workflow_run` workflow runs with write permissions, mints any needed tokens, then calls the `splice-wf-run` action to consume the artifact, create the split PR, and comment back.
 
 This avoids trying to push from a read-only token context on fork-originated events.
+The privileged stage does not trust the artifact: see [Security Model](#security-model).
 
 ***
 
@@ -33,9 +34,6 @@ jobs:
     # Fast-path filter: skip this job unless the comment mentions splice-bot.
     if: ${{ contains(github.event.comment.body, 'splice-bot') }}
     uses: leanprover-community/SpliceBot/.github/workflows/splice.yaml@master
-    with:
-      # Optional override; defaults to "master"
-      base_ref: master
 ```
 
 ## 2) Privileged workflow_run workflow
@@ -349,11 +347,25 @@ Notes:
 
 ***
 
+# Security Model
+
+GitHub runs `pull_request_review_comment` workflows from the PR's merge commit, so for a fork PR the PR author controls the trigger workflow and everything in the bridge artifact.
+`splice-wf-run` therefore treats the artifact only as a hint:
+
+- It consumes the artifact with [privilege-escalation-bridge](https://github.com/leanprover-community/privilege-escalation-bridge) v2 and `verify: true`. The bridge re-fetches the review comment (by the comment id in the artifact) and the PR it belongs to from the API. It checks that the comment's author is the user whose event started the trigger run, and that the comment was written before that run and last changed at most 24 hours before it.
+- The commenter, the PR author, the PR number, the file path, the comment body, and the PR's head repository, branch and commit all come from those verified values.
+- The base repository is the repository the `workflow_run` workflow runs in.
+- `base_ref`, `committer` and `author` are `splice-wf-run` inputs. The trigger workflow still accepts its old inputs with these names, but they are ignored.
+
+A forged artifact can at most point the run at another recent review comment by the same user, which that user could have triggered directly. Anything else fails verification, and the run stops without commenting anywhere.
+
+***
+
 # Token Matrix
 
 | Token role | Used for | Resolution / fallback order | Required permissions (GitHub App / fine-grained PAT) | Classic PAT scopes | Install target |
 | ---------- | -------- | --------------------------- | ----------------------------------------------------- | ------------------ | -------------- |
-| `token` | Artifact download, review-comment fetch, checkout, PR create/update, callback comments, PR labels; also branch push when it is the effective push token | `token` -> `github.token` | Baseline: `Actions: Read`, `Pull requests: Read & write`, `Contents: Read`; add `Issues: Read & write` when using `label_commands`; require `Contents: Read & write` when `token` performs branch push (non-fork mode, or fork mode when `branch_token` falls back to `token`) | `repo` (private repos), `public_repo` (public-only repos) | Base repository (and fork too if this token is used as branch fallback) |
+| `token` | Artifact download, verifying the review comment and PR, checkout, PR create/update, callback comments, PR labels; also branch push when it is the effective push token | `token` -> `github.token` | Baseline: `Actions: Read`, `Pull requests: Read & write`, `Contents: Read`; add `Issues: Read & write` when using `label_commands`; require `Contents: Read & write` when `token` performs branch push (non-fork mode, or fork mode when `branch_token` falls back to `token`) | `repo` (private repos), `public_repo` (public-only repos) | Base repository (and fork too if this token is used as branch fallback) |
 | `authz_token` | Authorization checks (`min_repo_permission`, `allowed_teams`, command-level label auth) | `authz_token` -> `token` -> `github.token` | Repo-permission checks: `Metadata: Read` (repo) when repo-permission authorization is enabled. Team checks: `Members: Read` (org). | `read:org` for org/team checks; plus `repo` for private repository collaborator checks (`public_repo` for public-only repos) | Base repo/org metadata context |
 | `branch_token` | Push PR branch in `push_to_fork` mode | `branch_token` -> `token` -> `github.token` | `Contents: Read & write`; often `Workflows: Read & write` if pushed commits include `.github/workflows/*` changes | `repo` (private forks), `public_repo` (public-only forks) | Fork repository |
 
@@ -380,11 +392,8 @@ Permission mapping references:
 
 ## `splice.yaml` inputs
 
-| Name | Type | Required | Default | Description |
-| ---- | ---- | -------- | ------- | ----------- |
-| `base_ref` | string | No | `master` | Base branch for the split PR. |
-| `committer` | string | No | bot user | Committer identity used by privileged workflow. |
-| `author` | string | No | PR author | Author identity used by privileged workflow. |
+`splice.yaml` has no supported inputs.
+Its `base_ref`, `committer` and `author` inputs are still accepted so existing callers keep working, but current `splice-wf-run` versions ignore them; set the `splice-wf-run` inputs of the same names instead.
 
 ## `splice-wf-run` action inputs
 
@@ -399,9 +408,12 @@ Permission mapping references:
 | `label_commands` | string | No | `''` | JSON array of label-command objects (`command`/`keyword`, optional `label`, optional `comment` template, optional `allowed_args`, `min_repo_permission`, `allowed_users`, `allowed_teams`, `type`). Each command needs `label` and/or `comment`. `allowed_args` allowlists trigger-line arguments; without it a command accepts none. `min_repo_permission: disabled` means command authorization relies only on the command-level allowlists. |
 | `push_to_fork` | string | No | `''` | Optional fork destination (`owner/repo`) for PR branches. |
 | `maintainer_can_modify` | string | No | `''` | Optional fork-mode override (`"true"`/`"false"`). |
+| `base_ref` | string | No | `''` | Base branch for the split PR. Defaults to the original PR's base branch. |
+| `committer` | string | No | `github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>` | Committer of the split PR's commit, as `Display Name <email@address.com>`. |
+| `author` | string | No | `''` | Author of the split PR's commit, as `Display Name <email@address.com>`. Defaults to the original PR's author, with their GitHub noreply address. |
 | `pr_title` | string | No | `chore({file_path}): automated extraction` | Title template for the split PR. Supports `{file_path}`, `{file_name}`, `{file_scope}`, and `{pr_number}` placeholders; unknown placeholders fail the run. |
 | `scope_strip_prefix` | string | No | `''` | Path prefix stripped from the `{file_scope}` placeholder (for example `Mathlib/`). |
-| `token` | string | No | `''` | Main API token for artifact download, checkout, and PR operations. Falls back to `github.token`. |
+| `token` | string | No | `''` | Main API token for artifact download, verification, checkout, and PR operations. Falls back to `github.token`. |
 | `authz_token` | string | No | `''` | Optional auth-check token for collaborator/team authorization lookups. Falls back to `token`, then `github.token`, but `allowed_teams` should use an explicit token with org-membership read access. |
 | `branch_token` | string | No | `''` | Optional branch push token for `push_to_fork` mode. Falls back to `token`, then `github.token`, but fork mode should use an explicit token with write access to the fork. |
 
@@ -412,7 +424,7 @@ Test-only internal inputs such as `bridge_override_json` are intentionally undoc
 
 | Name | Required | Description |
 | ---- | -------- | ----------- |
-| `token` | No | Main API token for artifact download, checkout, and PR operations. Falls back to `github.token`. |
+| `token` | No | Main API token for artifact download, verification, checkout, and PR operations. Falls back to `github.token`. |
 | `authz_token` | No | Auth-check token for collaborator/team authorization lookups. Required in practice for `allowed_teams`. |
 | `branch_token` | No | Branch push token for `push_to_fork` mode. Required in practice for fork mode. |
 
@@ -420,7 +432,10 @@ Test-only internal inputs such as `bridge_override_json` are intentionally undoc
 
 # Operational Caveats
 
-- The privileged stage re-fetches the trigger comment and parses the keyword/args/extra text from its current body, so the command grammar always runs at the `splice-wf-run` pin's version — even on PRs whose merge commit still carries an older trigger-workflow pin. Two consequences: edits made to the comment between the event and the privileged run take effect (only the commenter or a repo maintainer can edit it), and a comment edited to no longer contain a `splice-bot` line becomes a silent no-op.
+- The privileged stage parses the keyword/args/extra text from the comment body as the bridge re-fetched it, so the command grammar always runs at the `splice-wf-run` pin's version — even on PRs whose merge commit still carries an older trigger-workflow pin. Two consequences: edits made to the comment between the event and the privileged run take effect (only the commenter or a repo maintainer can edit it), and a comment edited to no longer contain a `splice-bot` line becomes a silent no-op.
+- A run triggered by someone other than the comment's author editing it fails verification, because that run is credited to the editor. It stops without a comment back; post a fresh comment instead.
+- The split is taken from the PR's head commit when the privileged stage runs, which can be newer than the commit the comment was made on.
+- If the PR's head repository has been deleted, the split fails and the comment back says so.
 - If selected changes touch `.github/workflows/*`, the token performing the push must have workflow-write capability (`Workflows: Read & write` for app/fine-grained tokens).
 - This can also be required even when the selected file is not under `.github/workflows/*` if upstream commits included in the push modify workflow files.
 - `maintainer_can_modify=true` is not supported for organization-owned forks on GitHub.
@@ -439,7 +454,7 @@ References:
 | `Not authorized to trigger splice-bot` | Commenter does not match configured auth rules | Adjust auth inputs (`allow_pr_author`, `min_repo_permission`, `allowed_users`, `allowed_teams`) or use an authorized account |
 | `Unknown splice-bot command` | Trigger keyword did not match any configured `label_commands` entry | Remove the keyword to run the default split flow, or add the missing command to `label_commands` |
 | `Invalid splice-bot command arguments` | Trigger-line text after the keyword did not match the command's `allowed_args` (or the command accepts no arguments) | Re-run with one of the allowed argument values, or add the argument to the command's `allowed_args` |
-| `Could not fetch review comment` | The triggering comment was deleted before the privileged stage ran, or `token` cannot read pull request comments on the base repo | Re-post the trigger comment, or grant the token `Pull requests` read access |
+| No comment back; "Consume bridge artifact" failed with `verify: ...` | The bridge could not verify the trigger comment: it was deleted before the privileged stage ran, edited by someone other than its author, or `token` cannot read pull requests on the base repo | Post a fresh trigger comment, or grant the token `Pull requests` read access |
 | `Invalid label command configuration` | `label_commands` could not be parsed or validated | Fix the JSON shape so it is an array of objects with `command`/`keyword` plus `label` and/or `comment` (with only supported `comment` placeholders) |
 | `Not authorized to run label command` | Commenter passed the top-level auth rules but did not match the command-specific `allowed_users`, `allowed_teams`, or `min_repo_permission` rules | Adjust the command config or use an account/team with the required access |
 | `Failed to apply label` | Split PR was created, but the workflow token could not add the configured label | Grant `issues: write` / equivalent token scope and verify the label name; the split PR already exists and can be labeled manually |

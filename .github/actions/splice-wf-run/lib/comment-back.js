@@ -40,9 +40,9 @@ function buildCommentBody({
 
   if (!filePath) {
     title = 'Could not determine target file';
-    bodyIntro = 'I could not determine `event.comment.path` from the bridge artifact.';
+    bodyIntro = 'I could not determine which file this review comment is on.';
     adviceLines = [
-      'Ensure the source workflow uploaded the `workflow-data` artifact and this run was triggered from a `pull_request_review_comment` event.',
+      'splice-bot only acts on review comments attached to a file in the pull request diff.',
       'Check the run logs link below and re-run after posting a fresh review comment on a file line.',
     ];
   } else if (triggerMode === 'invalid') {
@@ -153,6 +153,9 @@ function buildCommentBody({
     adviceLines = [];
     if (failedStepNames.includes('Consume bridge artifact')) {
       adviceLines.push('Ensure the source workflow uploaded `workflow-data` and this workflow is consuming the correct `source_workflow`.');
+    }
+    if (failedStepNames.includes('Read trigger comment and PR')) {
+      adviceLines.push('Check the "Read trigger comment and PR" logs; for example, the pull request\'s head repository may have been deleted.');
     }
     if (failedStepNames.includes('Check out BASE') || failedStepNames.includes('Check out HEAD')) {
       adviceLines.push('Verify the token used by checkout can read both base/head repos and that the referenced refs/SHAs still exist.');

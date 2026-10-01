@@ -61,12 +61,12 @@ async function authorizeCommenter({
   if (!commenterLogin || !prAuthorLogin || !baseRepo) {
     return {
       decision: 'error',
-      reason: 'Missing bridge data required for authorization.',
+      reason: 'Missing verified data required for authorization.',
       details: [
         `commenter_login: ${commenterLogin || '(missing)'}`,
         `pr_author_login: ${prAuthorLogin || '(missing)'}`,
         `base_repo: ${baseRepo || '(missing)'}`,
-        'Ensure splice.yaml emits comment.user.login, pull_request.user.login, and pull_request.base.repo.full_name.',
+        'These come from the review comment and pull request that the bridge verified.',
       ].join('\n'),
     };
   }
