@@ -1,0 +1,38 @@
+name: lite bot-sender test
+
+# Throwaway: checks whether the pre-commit.ci lite app pushes a fix for a PR whose
+# `opened` event came from a GitHub App rather than a user. Not for merging.
+on: pull_request
+
+permissions:
+  contents: read
+
+jobs:
+  lite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Report the sender
+        env:
+          SENDER_LOGIN: ${{ github.event.sender.login }}
+          SENDER_TYPE: ${{ github.event.sender.type }}
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+        run: printf 'sender=%s (%s) actor=%s triggering_actor=%s\n' "$SENDER_LOGIN" "$SENDER_TYPE" "$ACTOR" "$TRIGGERING_ACTOR"
+
+      - name: Strip trailing whitespace from the test file
+        run: sed -i 's/[[:space:]]*$//' lite-test.txt
+
+      # lite-action skips unless `sender.type` is "User". Let a bot sender through, except
+      # the lite app itself, whose pushes must stay skipped to avoid a loop.
+      - name: Let bot-opened PRs through the lite action's sender check
+        if: github.event.sender.type == 'Bot' && github.event.sender.login != 'pre-commit-ci-lite[bot]'
+        run: |
+          jq '.sender.type = "User"' "$GITHUB_EVENT_PATH" > "$RUNNER_TEMP/event.json"
+          cp "$RUNNER_TEMP/event.json" "$GITHUB_EVENT_PATH"
+
+      - uses: pre-commit-ci/lite-action@5d6cc0eb514c891a40562a58a8e71576c5c7fb43 # v1.1.0
+        if: success() || failure()
